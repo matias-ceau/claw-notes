@@ -188,9 +188,31 @@ chmod 700 ~/.shortcuts ~/.shortcuts/*
 
 ## Cloud Sync
 
-The vault is a standard folder in Android shared storage. Sync it with any app you prefer:
+### Built-in Cloud Sync (rclone)
 
-### Recommended Apps
+The project includes a `claw-sync` CLI tool and "Cloud Sync" widget for automated cloud synchronization:
+
+**Setup:**
+```bash
+claw-sync --setup
+```
+
+**Supported providers via rclone:**
+- Google Drive
+- Dropbox
+- Mega
+- OneDrive
+- Box
+- pCloud
+- And 40+ more
+
+**Usage:**
+- **Cloud Sync widget**: Tap to sync/push/pull vault
+- **CLI**: `claw-sync` (bidirectional), `claw-sync --push`, `claw-sync --pull`
+
+### Alternative: External Sync Apps
+
+You can also sync the vault with any standard file sync app:
 
 | App | Type | Notes |
 |-----|------|-------|

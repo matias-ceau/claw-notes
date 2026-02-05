@@ -34,6 +34,7 @@ After setup, add Termux:Widget to your home screen:
 | **Quick Note** | Dialog for quick text capture |
 | **Journal** | Add to today's journal |
 | **Ask Assistant** | Quick question → AI response via notification |
+| **Cloud Sync** | Sync vault to cloud storage (Google Drive, Mega, etc.) |
 | **Sync** | Git commit and push |
 | **Status** | Show system status |
 
