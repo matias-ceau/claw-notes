@@ -20,7 +20,7 @@ Commands:
   note <title>        Create quick text note
   journal [text]      Add to today's journal
   sync [message]      Git commit and push
-  cloud-sync [opts]   Sync vault to cloud (Google Drive, Dropbox, etc.)
+  cloud-sync [cmd]    Cloud sync (push/pull/sync) via rclone
   start               Start OpenClaw gateway
   stop                Stop OpenClaw gateway
   status              Show system status

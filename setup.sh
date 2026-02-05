@@ -79,6 +79,40 @@ else
     ok "Skipped"
 fi
 
+# Check for existing installation at old location and offer migration
+if [ "$ENV" = "termux" ]; then
+    OLD_LOCATION="$HOME/storage/shared/Documents/claw-notes"
+    if [ -d "$OLD_LOCATION/.claw" ] && [ "$SCRIPT_DIR" != "$OLD_LOCATION" ]; then
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}Migration Notice${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "    An existing installation was found at:"
+        echo "    $OLD_LOCATION"
+        echo ""
+        echo "    The default location has changed to:"
+        echo "    $HOME/claw-notes"
+        echo ""
+        echo "    Your current installation is at:"
+        echo "    $SCRIPT_DIR"
+        echo ""
+        echo "    Note: This is a code location change. Your data (notes/journals)"
+        echo "    will be stored separately in a vault location you choose next."
+        echo ""
+        read -p "    Continue with setup? [Y/n] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo ""
+            echo "Setup cancelled. You can:"
+            echo "  1. Move the repo: mv '$OLD_LOCATION' '$HOME/claw-notes'"
+            echo "  2. Or update config: echo 'CLAW_ROOT=\"$OLD_LOCATION\"' > ~/.config/claw-notes/config"
+            echo ""
+            exit 0
+        fi
+    fi
+fi
+
 # Step 5: Configure vault location (DATA separate from CODE)
 step 5 $TOTAL "Configuring vault location..."
 echo ""
@@ -155,7 +189,47 @@ if [ -d "$SCRIPT_DIR/pages" ] && [ ! -f "$VAULT_ROOT/pages/welcome.md" ]; then
     echo ""
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         cp -r "$SCRIPT_DIR/pages/"* "$VAULT_ROOT/pages/" 2>/dev/null || true
-        cp -r "$SCRIPT_DIR/journals/"* "$VAULT_ROOT/journals/" 2>/dev/null || true
+        
+         # Create a dated example journal entry using the current date instead of copying a static file
+        today="$(date +%Y-%m-%d)"
+        example_journal="$VAULT_ROOT/journals/${today}.md"
+        if [ ! -f "$example_journal" ]; then
+            cat > "$example_journal" <<'JOURNAL_EOF'
+---
+type: journal
+date: DATE_PLACEHOLDER
+created: DATE_PLACEHOLDER_ISO
+---
+
+# DATE_PLACEHOLDER
+
+## Welcome to Claw Notes
+
+This is your daily journal. The structure is:
+
+- **Code** (scripts, widgets): Lives in the git repo (~/claw-notes)
+- **Data** (notes, journals): Lives here in the vault (can be synced to cloud)
+
+Your vault can be synced independently using:
+- Syncthing (recommended, F-Droid)
+- FolderSync
+- Google Drive / Dropbox apps
+- Any rclone-supported provider
+
+## Getting Started
+
+1. Add Termux:Widget to your home screen
+2. Tap 'Record Voice' to transcribe audio
+3. Tap 'Journal' to create daily entries
+4. Tap 'Quick Note' for topic notes
+
+Start writing your first entry below this line.
+JOURNAL_EOF
+            # Replace placeholders with actual date
+            sed -i "s/DATE_PLACEHOLDER_ISO/${today}T00:00:00Z/g" "$example_journal"
+            sed -i "s/DATE_PLACEHOLDER/${today}/g" "$example_journal"
+        fi
+        
         ok "Example content copied to vault"
     fi
 fi
@@ -294,9 +368,6 @@ if [ "$ENV" = "termux" ]; then
     # Copy boot script (not symlink - needs to work even if repo moves)
     cp "$SCRIPT_DIR/.claw/boot/start-claw.sh" "$HOME/.termux/boot/start-claw.sh"
     chmod +x "$HOME/.termux/boot/start-claw.sh"
-
-    # Update boot script with actual paths
-    sed -i "s|CLAW_ROOT=\"\"|CLAW_ROOT=\"$SCRIPT_DIR\"|g" "$HOME/.termux/boot/start-claw.sh" 2>/dev/null || true
 
     ok "Boot script installed to ~/.termux/boot/"
     echo "    Note: Install Termux:Boot from F-Droid for auto-start"
