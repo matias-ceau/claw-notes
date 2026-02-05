@@ -1,16 +1,30 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Claw Notes - Shared Configuration
+#
+# Architecture: Code and Data are separate
+# - CLAW_ROOT: Code repository (scripts, config templates)
+# - VAULT_ROOT: User data (notes, journals, transcripts) - can be cloud-synced
 
 # Detect environment
 if [ -d "/data/data/com.termux" ]; then
     CLAW_ENV="termux"
-    CLAW_ROOT="${CLAW_ROOT:-$HOME/storage/shared/Documents/claw-notes}"
+    # Code location (where .claw/ lives)
+    CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+    # Data location (cloud-syncable, separate from code)
+    VAULT_ROOT="${VAULT_ROOT:-$HOME/storage/shared/Documents/ClawNotes-Vault}"
 else
     CLAW_ENV="linux"
     CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+    VAULT_ROOT="${VAULT_ROOT:-$HOME/ClawNotes-Vault}"
 fi
 
-# Paths
+# Load user config if exists (overrides defaults)
+CLAW_USER_CONFIG="$HOME/.config/claw-notes/config"
+if [ -f "$CLAW_USER_CONFIG" ]; then
+    source "$CLAW_USER_CONFIG"
+fi
+
+# Code paths (infrastructure - in git repo)
 CLAW_DIR="$CLAW_ROOT/.claw"
 CLAW_BIN="$CLAW_DIR/bin"
 CLAW_LIB="$CLAW_DIR/lib"
@@ -18,13 +32,14 @@ CLAW_CONFIG="$CLAW_DIR/config"
 CLAW_CACHE="$CLAW_DIR/cache"
 CLAW_LOG="$CLAW_DIR/logs"
 
-# Vault paths
-VAULT_PAGES="$CLAW_ROOT/pages"
-VAULT_JOURNALS="$CLAW_ROOT/journals"
-VAULT_TRANSCRIPTS_RAW="$CLAW_ROOT/transcripts/raw"
-VAULT_TRANSCRIPTS_CLEAN="$CLAW_ROOT/transcripts/cleaned"
-VAULT_SUMMARIES="$CLAW_ROOT/summaries"
-VAULT_ASSETS="$CLAW_ROOT/assets"
+# Vault paths (user data - cloud-syncable, NOT in code repo)
+VAULT_PAGES="$VAULT_ROOT/pages"
+VAULT_JOURNALS="$VAULT_ROOT/journals"
+VAULT_TRANSCRIPTS_RAW="$VAULT_ROOT/transcripts/raw"
+VAULT_TRANSCRIPTS_CLEAN="$VAULT_ROOT/transcripts/cleaned"
+VAULT_SUMMARIES="$VAULT_ROOT/summaries"
+VAULT_ASSETS="$VAULT_ROOT/assets"
+VAULT_TEMPLATES="$VAULT_ROOT/templates"
 
 # OpenClaw settings
 OPENCLAW_HOST="${OPENCLAW_HOST:-127.0.0.1}"
@@ -54,9 +69,21 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Ensure directories exist
 ensure_dirs() {
+    # Vault directories (user data)
     mkdir -p "$VAULT_PAGES" "$VAULT_JOURNALS" "$VAULT_TRANSCRIPTS_RAW" \
              "$VAULT_TRANSCRIPTS_CLEAN" "$VAULT_SUMMARIES" "$VAULT_ASSETS" \
-             "$CLAW_CACHE" "$CLAW_LOG"
+             "$VAULT_TEMPLATES"
+    # Code directories (infrastructure)
+    mkdir -p "$CLAW_CACHE" "$CLAW_LOG"
+}
+
+# Ensure vault is initialized with templates
+ensure_vault() {
+    ensure_dirs
+    # Copy templates from code repo if vault templates are empty
+    if [ -d "$CLAW_ROOT/templates" ] && [ ! -f "$VAULT_TEMPLATES/note.md" ]; then
+        cp -r "$CLAW_ROOT/templates/"* "$VAULT_TEMPLATES/" 2>/dev/null || true
+    fi
 }
 
 # Generate timestamp

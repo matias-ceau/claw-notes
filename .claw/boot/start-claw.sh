@@ -2,26 +2,35 @@
 #
 # Claw Notes - Termux:Boot Startup Script
 #
-# Copy this to ~/.termux/boot/ for auto-start on device boot:
-#   cp /path/to/claw-notes/.claw/boot/start-claw.sh ~/.termux/boot/
-#   chmod +x ~/.termux/boot/start-claw.sh
+# This script is automatically installed to ~/.termux/boot/ by setup.sh
+# It starts the Claw Notes assistant when your device boots.
+#
+# Requirements: Install Termux:Boot from F-Droid
 
-# Find claw-notes location
-CLAW_LOCATIONS=(
-    "$HOME/storage/shared/Documents/claw-notes"
-    "$HOME/claw-notes"
-    "/sdcard/Documents/claw-notes"
-)
+# Load user config if exists
+CLAW_USER_CONFIG="$HOME/.config/claw-notes/config"
+if [ -f "$CLAW_USER_CONFIG" ]; then
+    source "$CLAW_USER_CONFIG"
+fi
 
-CLAW_ROOT=""
-for loc in "${CLAW_LOCATIONS[@]}"; do
-    if [ -d "$loc/.claw" ]; then
-        CLAW_ROOT="$loc"
-        break
-    fi
-done
+# Fallback: search common locations
+if [ -z "$CLAW_ROOT" ] || [ ! -d "$CLAW_ROOT/.claw" ]; then
+    CLAW_LOCATIONS=(
+        "$HOME/claw-notes"
+        "$HOME/storage/shared/Documents/claw-notes"
+        "/sdcard/Documents/claw-notes"
+    )
 
-if [ -z "$CLAW_ROOT" ]; then
+    CLAW_ROOT=""
+    for loc in "${CLAW_LOCATIONS[@]}"; do
+        if [ -d "$loc/.claw" ]; then
+            CLAW_ROOT="$loc"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CLAW_ROOT" ] || [ ! -d "$CLAW_ROOT/.claw" ]; then
     echo "ERROR: claw-notes not found"
     exit 1
 fi

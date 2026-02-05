@@ -1,0 +1,19 @@
+# Syncthing ignore file for ClawNotes-Vault
+# Copy this to your vault root to exclude large files from sync
+
+# Audio files (too large for sync)
+*.m4a
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.webm
+
+# Entire assets folder (audio recordings)
+/assets
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
