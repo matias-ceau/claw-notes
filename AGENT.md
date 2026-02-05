@@ -41,7 +41,7 @@ Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenCla
 | Component | Location | Sync Method |
 |-----------|----------|-------------|
 | **Code** (scripts, widgets) | `~/claw-notes/` (this repo) | Git |
-| **Data** (notes, journals) | `~/storage/shared/Documents/ClawNotes-Vault/` | Cloud (rclone) |
+| **Data** (notes, journals) | `~/storage/shared/Documents/ClawNotes-Vault/` | Cloud (via third-party sync apps) |
 | **Config** (API keys) | `~/.config/claw-notes/` + `~/.openclaw/` | Manual backup |
 
 This separation allows:
