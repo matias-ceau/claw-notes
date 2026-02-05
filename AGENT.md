@@ -8,6 +8,8 @@ Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenCla
 
 ## Architecture
 
+**Key Design: Code and Data are separate.**
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        User Interfaces                       │
@@ -26,11 +28,27 @@ Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenCla
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
-        ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │ Whisper  │   │   LLM    │   │  Vault   │
-        │(cloud API)│   │ (brain)  │   │ (memory) │
-        └──────────┘   └──────────┘   └──────────┘
+        ┌──────────┐   ┌──────────┐   ┌──────────────────┐
+        │ Whisper  │   │   LLM    │   │      Vault       │
+        │(cloud API)│   │ (brain)  │   │ (separate from   │
+        └──────────┘   └──────────┘   │  code, cloud-    │
+                                      │  syncable)       │
+                                      └──────────────────┘
 ```
+
+### Separation of Concerns
+
+| Component | Location | Sync Method |
+|-----------|----------|-------------|
+| **Code** (scripts, widgets) | `~/claw-notes/` (this repo) | Git |
+| **Data** (notes, journals) | `~/storage/shared/Documents/ClawNotes-Vault/` | Cloud (rclone) |
+| **Config** (API keys) | `~/.config/claw-notes/` + `~/.openclaw/` | Manual backup |
+
+This separation allows:
+- Public code repo without exposing personal notes
+- Cloud sync of vault via Google Drive, Mega, Dropbox, etc.
+- Easy backup and restore of user data
+- Multiple devices sharing the same vault
 
 ## Key Principle
 
@@ -72,25 +90,56 @@ See: [OpenClaw Audio Docs](https://docs.openclaw.ai/nodes/audio)
 
 ## File Structure
 
+### Code Repository (`~/claw-notes/`)
+
 ```
-claw-notes/
-├── .shortcuts/              ← Termux:Widget (HOME SCREEN)
-│   ├── Record Voice         ← Record → send to OpenClaw
-│   ├── Quick Note           ← Dialog → save to vault
-│   ├── Journal              ← Add to today's journal
-│   ├── Ask Assistant        ← Query OpenClaw
-│   ├── Sync                 ← Git commit/push
-│   └── tasks/               ← Background processing
+claw-notes/                      ← PUBLIC (git repo)
+├── .shortcuts/                  ← Termux:Widget (HOME SCREEN)
+│   ├── Record Voice             ← Record → send to OpenClaw
+│   ├── Quick Note               ← Dialog → save to vault
+│   ├── Journal                  ← Add to today's journal
+│   ├── Ask Assistant            ← Query OpenClaw
+│   ├── Sync                     ← Git commit/push (code)
+│   ├── Cloud Sync               ← Sync vault to cloud
+│   ├── Status                   ← Show system status
+│   └── tasks/                   ← Background processing
 ├── .claw/
-│   ├── boot/                ← Auto-start scripts
-│   ├── lib/                 ← Shared config
-│   ├── skills/              ← Workspace skills
-│   └── config/              ← OpenClaw config template
-├── pages/                   ← Topic notes
-├── journals/                ← Daily journals
-├── transcripts/             ← Voice transcripts
-├── summaries/               ← AI summaries
-└── assets/                  ← Audio files
+│   ├── boot/                    ← Auto-start scripts
+│   │   ├── watchdog.sh          ← Keeps OpenClaw alive
+│   │   └── start-claw.sh        ← Boot script (copied to ~/.termux/boot/)
+│   ├── bin/                     ← CLI tools
+│   │   ├── claw-sync            ← Cloud sync helper
+│   │   └── ...
+│   ├── lib/                     ← Shared config
+│   ├── skills/                  ← Workspace skills
+│   └── config/                  ← OpenClaw config template
+├── templates/                   ← Note templates (copied to vault)
+├── setup.sh                     ← First-run setup
+└── AGENT.md                     ← This file
+```
+
+### Vault (`~/storage/shared/Documents/ClawNotes-Vault/`)
+
+```
+ClawNotes-Vault/                 ← PRIVATE (cloud-synced)
+├── pages/                       ← Topic notes
+├── journals/                    ← Daily journals (YYYY-MM-DD.md)
+├── transcripts/
+│   ├── raw/                     ← Direct Whisper output
+│   └── cleaned/                 ← LLM-processed transcripts
+├── summaries/                   ← AI-generated summaries
+├── assets/                      ← Audio files (NOT synced to cloud)
+└── templates/                   ← Note templates
+```
+
+### User Config (`~/.config/claw-notes/`)
+
+```bash
+# ~/.config/claw-notes/config
+CLAW_ROOT="/path/to/claw-notes"      # Code location
+VAULT_ROOT="/path/to/vault"          # Data location
+RCLONE_REMOTE="claw-notes"           # Cloud remote name
+RCLONE_PATH="ClawNotes-Vault"        # Cloud folder
 ```
 
 ## Transcription Flow
@@ -127,7 +176,44 @@ Android kills idle processes. Solutions:
 - Watchdog auto-restart in `.claw/boot/`
 
 ### Storage
-SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/claw-notes`.
+SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/ClawNotes-Vault/`.
+
+## Cloud Sync
+
+The vault is designed to be synced to cloud storage separately from the code:
+
+### Setup
+```bash
+claw-sync --setup    # Interactive cloud provider setup
+```
+
+Supported providers (via rclone):
+- Google Drive (recommended)
+- Mega
+- Dropbox
+- OneDrive
+- Box, pCloud, and 40+ more
+
+### Usage
+```bash
+claw-sync            # Bidirectional sync
+claw-sync --push     # Upload local to cloud
+claw-sync --pull     # Download cloud to local (overwrites!)
+claw-sync --status   # Show configuration
+```
+
+Or use the "Cloud Sync" widget from the home screen.
+
+### What Gets Synced
+- `pages/` - Notes
+- `journals/` - Daily journals
+- `transcripts/` - Voice transcripts
+- `summaries/` - AI summaries
+- `templates/` - Note templates
+
+### What Does NOT Get Synced
+- `assets/` - Audio files (too large for cloud sync)
+- Code repo - Use git for that
 
 ## Adding Features
 
