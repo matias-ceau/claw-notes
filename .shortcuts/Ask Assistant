@@ -44,8 +44,9 @@ if [ -n "$ANSWER" ]; then
     SHORT=$(echo "$ANSWER" | head -c 200)
     [ ${#ANSWER} -gt 200 ] && SHORT="${SHORT}..."
 
-    # Save answer to temp file for safe clipboard copy (avoids command injection)
-    ANSWER_FILE="$CLAW_CACHE/last_answer.txt"
+    # Save answer to unique temp file for safe clipboard copy
+    # Uses PID + timestamp to avoid race conditions with overlapping notifications
+    ANSWER_FILE="$CLAW_CACHE/answer_$$_$(date +%s).txt"
     mkdir -p "$CLAW_CACHE"
     printf '%s' "$ANSWER" > "$ANSWER_FILE"
 

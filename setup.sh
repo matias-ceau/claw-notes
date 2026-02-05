@@ -97,47 +97,57 @@ fi
 
 if [ "$CONFIGURE_KEYS" = true ]; then
     echo ""
-    read -p "    OpenAI API key: " OPENAI_KEY
-    read -p "    OpenRouter API key (optional): " OPENROUTER_KEY
+    # Use -s flag to hide API key input
+    read -sp "    OpenAI API key: " OPENAI_KEY
+    echo ""
+    read -sp "    OpenRouter API key (optional): " OPENROUTER_KEY
+    echo ""
     echo ""
 
-    # Build providers section
-    PROVIDERS=""
-    if [ -n "$OPENAI_KEY" ]; then
-        PROVIDERS="\"openai\": { \"apiKey\": \"$OPENAI_KEY\" }"
-    fi
-    if [ -n "$OPENROUTER_KEY" ]; then
-        [ -n "$PROVIDERS" ] && PROVIDERS="$PROVIDERS,"
-        PROVIDERS="$PROVIDERS \"openrouter\": { \"apiKey\": \"$OPENROUTER_KEY\" }"
+    # Validate at least one key provided
+    if [ -z "$OPENAI_KEY" ] && [ -z "$OPENROUTER_KEY" ]; then
+        warn "No API keys provided - transcription won't work"
     fi
 
-    cat > "$OPENCLAW_CONFIG" << EOF
-{
-  "gateway": {
-    "host": "127.0.0.1",
-    "port": 3000
-  },
-  "workspace": {
-    "root": "$SCRIPT_DIR"
-  },
-  "providers": {
-    $PROVIDERS
-  },
-  "tools": {
-    "media": {
-      "audio": {
-        "enabled": true,
-        "models": [
-          { "provider": "openai", "model": "whisper-1" }
-        ]
-      }
-    }
-  },
-  "channels": {
-    "whatsapp": { "enabled": true }
-  }
-}
-EOF
+    # Determine which provider to use for audio transcription
+    if [ -n "$OPENAI_KEY" ]; then
+        AUDIO_PROVIDER="openai"
+        AUDIO_MODEL="whisper-1"
+    elif [ -n "$OPENROUTER_KEY" ]; then
+        AUDIO_PROVIDER="openrouter"
+        AUDIO_MODEL="openai/whisper-large-v3"
+    else
+        AUDIO_PROVIDER="openai"
+        AUDIO_MODEL="whisper-1"
+    fi
+
+    # Build config safely using jq to handle special characters in keys/paths
+    CONFIG=$(jq -n \
+        --arg workspace "$SCRIPT_DIR" \
+        --arg openai_key "$OPENAI_KEY" \
+        --arg openrouter_key "$OPENROUTER_KEY" \
+        --arg audio_provider "$AUDIO_PROVIDER" \
+        --arg audio_model "$AUDIO_MODEL" \
+        '{
+            gateway: { host: "127.0.0.1", port: 3000 },
+            workspace: { root: $workspace },
+            providers: (
+                {}
+                | if $openai_key != "" then . + { openai: { apiKey: $openai_key } } else . end
+                | if $openrouter_key != "" then . + { openrouter: { apiKey: $openrouter_key } } else . end
+            ),
+            tools: {
+                media: {
+                    audio: {
+                        enabled: true,
+                        models: [{ provider: $audio_provider, model: $audio_model }]
+                    }
+                }
+            },
+            channels: { whatsapp: { enabled: true } }
+        }')
+
+    echo "$CONFIG" > "$OPENCLAW_CONFIG"
     ok "Config saved"
 else
     ok "Keeping existing config"
