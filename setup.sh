@@ -79,6 +79,40 @@ else
     ok "Skipped"
 fi
 
+# Check for existing installation at old location and offer migration
+if [ "$ENV" = "termux" ]; then
+    OLD_LOCATION="$HOME/storage/shared/Documents/claw-notes"
+    if [ -d "$OLD_LOCATION/.claw" ] && [ "$SCRIPT_DIR" != "$OLD_LOCATION" ]; then
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}Migration Notice${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "    An existing installation was found at:"
+        echo "    $OLD_LOCATION"
+        echo ""
+        echo "    The default location has changed to:"
+        echo "    $HOME/claw-notes"
+        echo ""
+        echo "    Your current installation is at:"
+        echo "    $SCRIPT_DIR"
+        echo ""
+        echo "    Note: This is a code location change. Your data (notes/journals)"
+        echo "    will be stored separately in a vault location you choose next."
+        echo ""
+        read -p "    Continue with setup? [Y/n] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo ""
+            echo "Setup cancelled. You can:"
+            echo "  1. Move the repo: mv '$OLD_LOCATION' '$HOME/claw-notes'"
+            echo "  2. Or update config: echo 'CLAW_ROOT=\"$OLD_LOCATION\"' > ~/.config/claw-notes/config"
+            echo ""
+            exit 0
+        fi
+    fi
+fi
+
 # Step 5: Configure vault location (DATA separate from CODE)
 step 5 $TOTAL "Configuring vault location..."
 echo ""
@@ -155,23 +189,47 @@ if [ -d "$SCRIPT_DIR/pages" ] && [ ! -f "$VAULT_ROOT/pages/welcome.md" ]; then
     echo ""
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         cp -r "$SCRIPT_DIR/pages/"* "$VAULT_ROOT/pages/" 2>/dev/null || true
-
-        # Create a dated example journal entry using the current date instead of copying a static file
+        
+         # Create a dated example journal entry using the current date instead of copying a static file
         today="$(date +%Y-%m-%d)"
         example_journal="$VAULT_ROOT/journals/${today}.md"
         if [ ! -f "$example_journal" ]; then
             cat > "$example_journal" <<'JOURNAL_EOF'
-# Daily Journal
+---
+type: journal
+date: DATE_PLACEHOLDER
+created: DATE_PLACEHOLDER_ISO
+---
 
-Welcome to your Claw Notes journal.
+# DATE_PLACEHOLDER
 
-- Your code (scripts, widgets, etc.) lives outside this vault.
-- Your data (notes, journals, transcripts) lives here and can be synced independently.
-- Use one file per day, named by date (for example: 2026-02-05.md).
+## Welcome to Claw Notes
+
+This is your daily journal. The structure is:
+
+- **Code** (scripts, widgets): Lives in the git repo (~/claw-notes)
+- **Data** (notes, journals): Lives here in the vault (can be synced to cloud)
+
+Your vault can be synced independently using:
+- Syncthing (recommended, F-Droid)
+- FolderSync
+- Google Drive / Dropbox apps
+- Any rclone-supported provider
+
+## Getting Started
+
+1. Add Termux:Widget to your home screen
+2. Tap 'Record Voice' to transcribe audio
+3. Tap 'Journal' to create daily entries
+4. Tap 'Quick Note' for topic notes
 
 Start writing your first entry below this line.
 JOURNAL_EOF
+            # Replace placeholders with actual date
+            sed -i "s/DATE_PLACEHOLDER_ISO/${today}T00:00:00Z/g" "$example_journal"
+            sed -i "s/DATE_PLACEHOLDER/${today}/g" "$example_journal"
         fi
+        
         ok "Example content copied to vault"
     fi
 fi
@@ -353,11 +411,16 @@ if [ "$ENV" = "termux" ]; then
     echo ""
     echo "  4. Your notes are in: $VAULT_ROOT"
     echo ""
-    echo "Cloud sync (optional):"
-    echo "  Sync your vault folder with any app:"
-    echo "  - Syncthing (recommended, F-Droid)"
-    echo "  - FolderSync, Dropsync"
-    echo "  - Google Drive, Dropbox app"
+    echo "Cloud sync:"
+    echo "  Configure cloud sync with Google Drive, Dropbox, Mega, etc.:"
+    echo "    claw-sync --setup"
+    echo ""
+    echo "  Then use the 'Cloud Sync' widget on your home screen"
+    echo ""
+    echo "  Or sync manually with third-party apps:"
+    echo "    - Syncthing (recommended, F-Droid)"
+    echo "    - FolderSync, Dropsync"
+    echo "    - Google Drive, Dropbox app"
     echo ""
 
     if command -v termux-notification &> /dev/null; then
