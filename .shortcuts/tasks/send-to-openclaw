@@ -2,7 +2,9 @@
 # Background task: Send audio to OpenClaw
 # OpenClaw handles transcription via its audio pipeline (OpenAI Whisper API, etc.)
 
-CLAW_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# Load user config to find CLAW_ROOT
+[ -f "$HOME/.config/claw-notes/config" ] && source "$HOME/.config/claw-notes/config"
+CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
 source "$CLAW_ROOT/.claw/lib/config.sh"
 
 AUDIO="$1"

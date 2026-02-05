@@ -218,7 +218,7 @@ else
     ok "Keeping existing config"
 fi
 
-# Step 7: Setup widgets (symlinks to home)
+# Step 7: Setup widgets (copy to home - symlinks don't work with Termux:Widget)
 step 7 $TOTAL "Setting up home screen widgets..."
 chmod +x "$SCRIPT_DIR/.shortcuts/"* 2>/dev/null || true
 chmod +x "$SCRIPT_DIR/.shortcuts/tasks/"* 2>/dev/null || true
@@ -226,20 +226,30 @@ chmod +x "$SCRIPT_DIR/.claw/bin/"* 2>/dev/null || true
 chmod +x "$SCRIPT_DIR/.claw/boot/"* 2>/dev/null || true
 
 if [ "$ENV" = "termux" ]; then
+    # Termux:Widget requires files to have canonical path under ~/.shortcuts
+    # Symlinks to external locations don't work - must copy files
     mkdir -p "$HOME/.shortcuts/tasks"
+    chmod 700 "$HOME/.shortcuts"
+    chmod 700 "$HOME/.shortcuts/tasks"
 
+    # Copy widget scripts (not symlinks!)
     for widget in "$SCRIPT_DIR/.shortcuts/"*; do
         [ -d "$widget" ] && continue
         name=$(basename "$widget")
-        ln -sf "$widget" "$HOME/.shortcuts/$name" 2>/dev/null || true
+        cp "$widget" "$HOME/.shortcuts/$name"
+        chmod 700 "$HOME/.shortcuts/$name"
     done
 
+    # Copy background tasks
     for task in "$SCRIPT_DIR/.shortcuts/tasks/"*; do
+        [ -f "$task" ] || continue
         name=$(basename "$task")
-        ln -sf "$task" "$HOME/.shortcuts/tasks/$name" 2>/dev/null || true
+        cp "$task" "$HOME/.shortcuts/tasks/$name"
+        chmod 700 "$HOME/.shortcuts/tasks/$name"
     done
 
-    ok "Widgets linked to ~/.shortcuts/"
+    ok "Widgets installed to ~/.shortcuts/"
+    echo "    Refresh Termux:Widget on home screen to see them"
 else
     ok "Scripts ready"
 fi

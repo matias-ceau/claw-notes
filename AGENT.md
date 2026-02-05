@@ -174,6 +174,18 @@ Android kills idle processes. Solutions:
 ### Storage
 SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/ClawNotes-Vault/`.
 
+### Termux:Widget
+Widget scripts must be **copied** (not symlinked) to `~/.shortcuts/`:
+- Symlinks to external paths don't work (canonical path check)
+- Directory permissions must be `700`
+- Refresh widget after changes
+
+Setup copies scripts automatically. To update manually:
+```bash
+cp -r /path/to/claw-notes/.shortcuts/* ~/.shortcuts/
+chmod 700 ~/.shortcuts ~/.shortcuts/*
+```
+
 ## Cloud Sync
 
 The vault is a standard folder in Android shared storage. Sync it with any app you prefer:
