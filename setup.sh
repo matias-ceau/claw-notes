@@ -155,7 +155,23 @@ if [ -d "$SCRIPT_DIR/pages" ] && [ ! -f "$VAULT_ROOT/pages/welcome.md" ]; then
     echo ""
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         cp -r "$SCRIPT_DIR/pages/"* "$VAULT_ROOT/pages/" 2>/dev/null || true
-        cp -r "$SCRIPT_DIR/journals/"* "$VAULT_ROOT/journals/" 2>/dev/null || true
+
+        # Create a dated example journal entry using the current date instead of copying a static file
+        today="$(date +%Y-%m-%d)"
+        example_journal="$VAULT_ROOT/journals/${today}.md"
+        if [ ! -f "$example_journal" ]; then
+            cat > "$example_journal" <<'JOURNAL_EOF'
+# Daily Journal
+
+Welcome to your Claw Notes journal.
+
+- Your code (scripts, widgets, etc.) lives outside this vault.
+- Your data (notes, journals, transcripts) lives here and can be synced independently.
+- Use one file per day, named by date (for example: 2026-02-05.md).
+
+Start writing your first entry below this line.
+JOURNAL_EOF
+        fi
         ok "Example content copied to vault"
     fi
 fi
