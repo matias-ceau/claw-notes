@@ -311,9 +311,6 @@ if [ "$ENV" = "termux" ]; then
     cp "$SCRIPT_DIR/.claw/boot/start-claw.sh" "$HOME/.termux/boot/start-claw.sh"
     chmod +x "$HOME/.termux/boot/start-claw.sh"
 
-    # Update boot script with actual paths
-    sed -i "s|CLAW_ROOT=\"\"|CLAW_ROOT=\"$SCRIPT_DIR\"|g" "$HOME/.termux/boot/start-claw.sh" 2>/dev/null || true
-
     ok "Boot script installed to ~/.termux/boot/"
     echo "    Note: Install Termux:Boot from F-Droid for auto-start"
 else
