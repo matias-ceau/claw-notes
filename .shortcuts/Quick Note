@@ -1,0 +1,60 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Quick Note
+# Dialog-based note capture
+
+CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+ensure_dirs
+
+# Get note content via dialog
+RESULT=$(termux-dialog text \
+    -t "Quick Note" \
+    -i "What's on your mind?" \
+    -m)
+
+# Parse result
+TEXT=$(echo "$RESULT" | jq -r '.text // empty')
+CODE=$(echo "$RESULT" | jq -r '.code // -1')
+
+# Check if cancelled
+if [ "$CODE" != "0" ] || [ -z "$TEXT" ]; then
+    exit 0
+fi
+
+# Extract first line as title (or use timestamp)
+TITLE=$(echo "$TEXT" | head -1 | cut -c1-50)
+[ -z "$TITLE" ] && TITLE="Note $(timestamp)"
+
+# Sanitize filename
+FILENAME=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+FILEPATH="$VAULT_PAGES/${FILENAME}.md"
+
+# Handle existing file
+if [ -f "$FILEPATH" ]; then
+    # Append to existing
+    echo "" >> "$FILEPATH"
+    echo "---" >> "$FILEPATH"
+    echo "" >> "$FILEPATH"
+    echo "## $(date '+%Y-%m-%d %H:%M')" >> "$FILEPATH"
+    echo "" >> "$FILEPATH"
+    echo "$TEXT" >> "$FILEPATH"
+    termux-toast "Added to existing note"
+else
+    # Create new
+    cat > "$FILEPATH" << EOF
+---
+type: note
+created: $(date -Iseconds)
+source: widget
+tags: []
+---
+
+# $TITLE
+
+$TEXT
+EOF
+    termux-toast "Note saved"
+fi
+
+termux-vibrate -d 100

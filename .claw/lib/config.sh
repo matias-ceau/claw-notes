@@ -78,3 +78,37 @@ is_termux() {
 openclaw_running() {
     pgrep -f "openclaw" > /dev/null 2>&1
 }
+
+# Notification helpers (no-op on non-Termux)
+notify() {
+    local title="$1"
+    local content="$2"
+    local id="${3:-claw}"
+    if is_termux && command -v termux-notification &> /dev/null; then
+        termux-notification --id "$id" --title "$title" --content "$content"
+    fi
+}
+
+notify_ongoing() {
+    local title="$1"
+    local content="$2"
+    local id="${3:-claw}"
+    if is_termux && command -v termux-notification &> /dev/null; then
+        termux-notification --id "$id" --title "$title" --content "$content" --ongoing
+    fi
+}
+
+notify_clear() {
+    local id="${1:-claw}"
+    if is_termux && command -v termux-notification-remove &> /dev/null; then
+        termux-notification-remove "$id"
+    fi
+}
+
+toast() {
+    if is_termux && command -v termux-toast &> /dev/null; then
+        termux-toast "$1"
+    else
+        echo "$1"
+    fi
+}

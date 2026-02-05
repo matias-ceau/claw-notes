@@ -22,6 +22,26 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
+show_notification() {
+    if command -v termux-notification &> /dev/null; then
+        termux-notification \
+            --id claw-assistant \
+            --title "Claw Assistant" \
+            --content "Running - tap for options" \
+            --ongoing \
+            --button1 "Record" \
+            --button1-action "$CLAW_ROOT/.shortcuts/Record Voice" \
+            --button2 "Note" \
+            --button2-action "$CLAW_ROOT/.shortcuts/Quick Note"
+    fi
+}
+
+clear_notification() {
+    if command -v termux-notification-remove &> /dev/null; then
+        termux-notification-remove claw-assistant
+    fi
+}
+
 start_openclaw() {
     log "Starting OpenClaw..."
     if [ -f "$HIJACK_JS" ]; then
@@ -31,6 +51,7 @@ start_openclaw() {
     fi
     local pid=$!
     log "OpenClaw started with PID: $pid"
+    show_notification
 }
 
 check_openclaw() {
@@ -81,6 +102,7 @@ case "${1:-}" in
         log "Stopping..."
         pkill -f "watchdog.sh" 2>/dev/null
         pkill -f "openclaw" 2>/dev/null
+        clear_notification
         if command -v termux-wake-unlock &> /dev/null; then
             termux-wake-unlock
         fi

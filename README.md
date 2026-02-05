@@ -1,94 +1,100 @@
 # Claw Notes
 
-Voice-to-markdown notes for Android. Record → Transcribe → Clean → Sync.
+Always-on AI assistant for Android. Voice notes, quick capture, WhatsApp integration.
 
-## What It Does
+## How It Works
 
-1. **Record** voice notes on your phone
-2. **Transcribe** with Whisper (local, offline)
-3. **Clean up** rambling transcripts with LLM
-4. **Sync** to git for backup and cross-device access
+Your phone becomes a smart notes device:
+- **Tap widget** → Record voice → AI transcribes and cleans it up
+- **Message WhatsApp** → Assistant responds, saves to vault
+- **Notification actions** → Quick note, sync, ask questions
 
-Works with Logseq, Obsidian, or any markdown-based PKM.
+No terminal needed. Everything via widgets and notifications.
 
-## Quick Start
+## Setup
 
 ```bash
-# Clone to your Android device (in Termux)
+# In Termux (from F-Droid, NOT Play Store)
+termux-setup-storage
 cd ~/storage/shared/Documents
 git clone <this-repo> claw-notes
 cd claw-notes
-
-# Run setup
 bash setup.sh
-
-# Add to PATH
-export PATH="$PATH:$(pwd)/.claw/bin"
-
-# Record your first note
-claw full my-first-note
 ```
 
-## Commands
+Setup installs dependencies, creates home screen widgets, and starts the assistant.
 
-```bash
-claw record [name]     # Record voice note
-claw full [name]       # Full pipeline: record → transcribe → process
-claw transcribe <file> # Transcribe audio with Whisper
-claw process <file>    # Clean transcript with LLM
-claw journal [text]    # Add to today's journal
-claw note <title>      # Create quick text note
-claw sync [message]    # Git commit and push
-claw start             # Start OpenClaw gateway
-claw stop              # Stop gateway
-claw status            # Show system status
-```
+## Home Screen Widgets
 
-## Structure
+After setup, add Termux:Widget to your home screen:
+
+| Widget | Action |
+|--------|--------|
+| **Record Voice** | One-tap recording → transcription → AI cleanup |
+| **Quick Note** | Dialog for quick text capture |
+| **Journal** | Add to today's journal |
+| **Ask Assistant** | Quick question → AI response via notification |
+| **Sync** | Git commit and push |
+| **Status** | Show system status |
+
+## WhatsApp Integration
+
+OpenClaw connects to WhatsApp. Message your assistant to:
+- Ask questions
+- Send voice notes for transcription
+- Get reminders
+- Search your notes
+
+Configure in OpenClaw settings after setup.
+
+## What Gets Created
 
 ```
 claw-notes/
-├── pages/              # Topic notes
-├── journals/           # Daily notes (YYYY-MM-DD.md)
+├── pages/              # Your notes
+├── journals/           # Daily journal (YYYY-MM-DD.md)
 ├── transcripts/
-│   ├── raw/            # Direct Whisper output
-│   └── cleaned/        # LLM-processed versions
-├── summaries/          # AI-generated summaries
-├── assets/             # Audio files, images
-├── templates/          # Note templates
-└── .claw/              # CLI tooling (hidden)
+│   ├── raw/            # Direct speech-to-text
+│   └── cleaned/        # AI-processed (coherent)
+├── summaries/          # AI summaries with action items
+└── assets/             # Audio files
 ```
 
 ## Requirements
 
-- Android with Termux (from F-Droid)
-- Termux:API (from F-Droid)
-- Node.js, Python, FFmpeg, Whisper, OpenClaw
+From F-Droid (not Play Store):
+- **Termux** - Linux environment
+- **Termux:API** - Android integration
+- **Termux:Widget** - Home screen shortcuts
+- **Termux:Boot** - Auto-start (optional)
 
-## Output Example
+## Auto-Start on Boot
 
-One voice recording produces three files:
-
-| File | Purpose |
-|------|---------|
-| `transcripts/raw/idea_transcript.md` | Exact Whisper output |
-| `transcripts/cleaned/idea_cleaned.md` | Coherent, readable version |
-| `summaries/idea_summary.md` | Key points + action items |
-
-## Auto-Start
-
-For automatic startup on boot (requires Termux:Boot):
-
+Install Termux:Boot, then:
 ```bash
 cp .claw/boot/start-claw.sh ~/.termux/boot/
-chmod +x ~/.termux/boot/start-claw.sh
 ```
 
-## Documentation
+The assistant starts automatically when your phone boots.
 
-- [[pages/welcome]] - Getting started
-- [[pages/workflow]] - How the pipeline works
-- [[pages/setup]] - Detailed installation
+## Persistent Notification
+
+When running, a notification stays in your tray with quick actions:
+- Tap **Record** to start voice capture
+- Tap **Note** for quick text entry
+
+This also keeps Android from killing the background process.
+
+## Offline Support
+
+- Voice recording: Always works
+- Transcription: Works offline (Whisper runs locally)
+- AI cleanup: Requires OpenClaw running
+- Sync: Requires network
+
+## For Developers
+
+See [AGENT.md](AGENT.md) for technical details and how to extend.
 
 ## License
 

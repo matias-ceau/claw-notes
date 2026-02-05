@@ -1,0 +1,39 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Sync
+# Git commit and push
+
+CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+cd "$CLAW_ROOT"
+
+# Check for changes
+if [ -z "$(git status --porcelain 2>/dev/null)" ]; then
+    termux-toast "Nothing to sync"
+    exit 0
+fi
+
+termux-notification --id claw-sync --title "Syncing..." --ongoing
+
+# Count changes
+CHANGES=$(git status --porcelain | wc -l)
+
+# Commit
+git add -A
+git commit -m "Sync $(date '+%Y-%m-%d %H:%M') ($CHANGES files)" 2>/dev/null
+
+# Push if remote exists
+if git remote -v | grep -q origin; then
+    if git push origin HEAD 2>/dev/null; then
+        termux-notification-remove claw-sync
+        termux-toast "Synced $CHANGES files"
+    else
+        termux-notification-remove claw-sync
+        termux-toast "Committed locally (push failed)"
+    fi
+else
+    termux-notification-remove claw-sync
+    termux-toast "Committed locally"
+fi
+
+termux-vibrate -d 100
