@@ -100,7 +100,7 @@ claw-notes/                      ← PUBLIC (git repo)
 │   ├── Journal                  ← Add to today's journal
 │   ├── Ask Assistant            ← Query OpenClaw
 │   ├── Sync                     ← Git commit/push (code)
-│   ├── Cloud Sync               ← Sync vault to cloud
+│   ├── Vault Info               ← Show vault location for syncing
 │   ├── Status                   ← Show system status
 │   └── tasks/                   ← Background processing
 ├── .claw/
@@ -108,8 +108,6 @@ claw-notes/                      ← PUBLIC (git repo)
 │   │   ├── watchdog.sh          ← Keeps OpenClaw alive
 │   │   └── start-claw.sh        ← Boot script (copied to ~/.termux/boot/)
 │   ├── bin/                     ← CLI tools
-│   │   ├── claw-sync            ← Cloud sync helper
-│   │   └── ...
 │   ├── lib/                     ← Shared config
 │   ├── skills/                  ← Workspace skills
 │   └── config/                  ← OpenClaw config template
@@ -138,8 +136,6 @@ ClawNotes-Vault/                 ← PRIVATE (cloud-synced)
 # ~/.config/claw-notes/config
 CLAW_ROOT="/path/to/claw-notes"      # Code location
 VAULT_ROOT="/path/to/vault"          # Data location
-RCLONE_REMOTE="claw-notes"           # Cloud remote name
-RCLONE_PATH="ClawNotes-Vault"        # Cloud folder
 ```
 
 ## Transcription Flow
@@ -180,40 +176,33 @@ SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/ClawNotes-V
 
 ## Cloud Sync
 
-The vault is designed to be synced to cloud storage separately from the code:
+The vault is a standard folder in Android shared storage. Sync it with any app you prefer:
 
-### Setup
-```bash
-claw-sync --setup    # Interactive cloud provider setup
-```
+### Recommended Apps
 
-Supported providers (via rclone):
-- Google Drive (recommended)
-- Mega
-- Dropbox
-- OneDrive
-- Box, pCloud, and 40+ more
+| App | Type | Notes |
+|-----|------|-------|
+| **Syncthing** | P2P | Open source, no cloud account needed, F-Droid |
+| **FolderSync** | Cloud | Supports 20+ providers, Play Store |
+| **Dropsync** | Dropbox | Dedicated Dropbox sync |
+| **Google Drive** | Cloud | Built-in Android, auto-backup folders |
 
-### Usage
-```bash
-claw-sync            # Bidirectional sync
-claw-sync --push     # Upload local to cloud
-claw-sync --pull     # Download cloud to local (overwrites!)
-claw-sync --status   # Show configuration
-```
+### Setup (Syncthing example)
 
-Or use the "Cloud Sync" widget from the home screen.
+1. Install Syncthing from F-Droid
+2. Add vault folder: `~/storage/shared/Documents/ClawNotes-Vault`
+3. Connect to your other devices (PC, tablet, etc.)
+4. Notes sync automatically in background
 
-### What Gets Synced
+### What to Sync
 - `pages/` - Notes
 - `journals/` - Daily journals
 - `transcripts/` - Voice transcripts
 - `summaries/` - AI summaries
 - `templates/` - Note templates
 
-### What Does NOT Get Synced
-- `assets/` - Audio files (too large for cloud sync)
-- Code repo - Use git for that
+### Exclude from Sync
+- `assets/` - Audio files (large, keep local only)
 
 ## Adding Features
 

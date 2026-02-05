@@ -1,0 +1,53 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# Claw Notes Widget: Vault Info
+#
+# Shows vault location for syncing with your preferred app:
+# - Syncthing (recommended, open source)
+# - FolderSync
+# - Dropsync
+# - Google Drive app
+# - Any file sync app
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Load user config
+if [ -f "$HOME/.config/claw-notes/config" ]; then
+    source "$HOME/.config/claw-notes/config"
+fi
+
+VAULT_ROOT="${VAULT_ROOT:-$HOME/storage/shared/Documents/ClawNotes-Vault}"
+
+# Count files
+pages=$(find "$VAULT_ROOT/pages" -name "*.md" 2>/dev/null | wc -l)
+journals=$(find "$VAULT_ROOT/journals" -name "*.md" 2>/dev/null | wc -l)
+transcripts=$(find "$VAULT_ROOT/transcripts" -name "*.md" 2>/dev/null | wc -l)
+
+info="Location: $VAULT_ROOT
+
+Content:
+  Pages: $pages
+  Journals: $journals
+  Transcripts: $transcripts
+
+Sync this folder with:
+  - Syncthing (recommended)
+  - FolderSync
+  - Google Drive
+  - Any sync app"
+
+termux-dialog text \
+    -t "Vault Info" \
+    -i "$info" \
+    2>/dev/null
+
+# Option to open folder in file manager
+choice=$(termux-dialog confirm \
+    -t "Open Folder?" \
+    -i "Open vault in file manager?" \
+    2>/dev/null | jq -r '.text // empty')
+
+if [ "$choice" = "yes" ]; then
+    termux-open "$VAULT_ROOT" 2>/dev/null || \
+    termux-toast "Open: $VAULT_ROOT"
+fi

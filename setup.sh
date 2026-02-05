@@ -38,7 +38,7 @@ else
     echo ""
 fi
 
-TOTAL=10
+TOTAL=9
 
 # Step 1: Update packages
 step 1 $TOTAL "Updating packages..."
@@ -110,6 +110,11 @@ mkdir -p "$VAULT_ROOT/pages" \
 # Copy templates to vault if not exists
 if [ ! -f "$VAULT_ROOT/templates/note.md" ] && [ -d "$SCRIPT_DIR/templates" ]; then
     cp -r "$SCRIPT_DIR/templates/"* "$VAULT_ROOT/templates/" 2>/dev/null || true
+fi
+
+# Copy Syncthing ignore file to vault root (for cloud sync)
+if [ ! -f "$VAULT_ROOT/.stignore" ] && [ -f "$SCRIPT_DIR/templates/.stignore" ]; then
+    cp "$SCRIPT_DIR/templates/.stignore" "$VAULT_ROOT/.stignore" 2>/dev/null || true
 fi
 
 # Optionally seed vault with example content
@@ -258,35 +263,8 @@ else
     ok "Skipped (Termux only)"
 fi
 
-# Step 9: Cloud sync setup (optional)
-step 9 $TOTAL "Cloud sync setup (optional)..."
-echo ""
-echo "    Your vault can be synced to cloud storage:"
-echo "    Google Drive, Mega, Dropbox, OneDrive, etc."
-echo ""
-read -p "    Setup cloud sync now? [y/N] " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    # Install rclone if needed
-    if ! command -v rclone &> /dev/null; then
-        echo "    Installing rclone..."
-        if [ "$ENV" = "termux" ]; then
-            pkg install -y rclone > /dev/null 2>&1
-        fi
-    fi
-
-    if command -v rclone &> /dev/null; then
-        "$SCRIPT_DIR/.claw/bin/claw-sync" --setup
-    else
-        warn "Install rclone manually, then run: claw-sync --setup"
-    fi
-else
-    ok "Skipped - run 'claw-sync --setup' later"
-fi
-
-# Step 10: Start assistant
-step 10 $TOTAL "Starting assistant..."
+# Step 9: Start assistant
+step 9 $TOTAL "Starting assistant..."
 if command -v openclaw &> /dev/null && [ "$ENV" = "termux" ]; then
     "$SCRIPT_DIR/.claw/boot/watchdog.sh" --daemon 2>/dev/null
     sleep 2
@@ -320,7 +298,12 @@ if [ "$ENV" = "termux" ]; then
     echo "  3. Or send voice notes to WhatsApp assistant"
     echo ""
     echo "  4. Your notes are in: $VAULT_ROOT"
-    echo "     Sync to cloud: claw-sync --push"
+    echo ""
+    echo "Cloud sync (optional):"
+    echo "  Sync your vault folder with any app:"
+    echo "  - Syncthing (recommended, F-Droid)"
+    echo "  - FolderSync, Dropsync"
+    echo "  - Google Drive, Dropbox app"
     echo ""
 
     if command -v termux-notification &> /dev/null; then
@@ -332,6 +315,7 @@ else
     echo "Usage:"
     echo "  openclaw gateway   # Start the assistant"
     echo "  openclaw onboard   # Connect WhatsApp"
-    echo "  claw-sync --setup  # Configure cloud sync"
+    echo ""
+    echo "Sync vault with Syncthing or any folder sync tool"
     echo ""
 fi
