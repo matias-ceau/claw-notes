@@ -190,7 +190,7 @@ if [ -d "$SCRIPT_DIR/pages" ] && [ ! -f "$VAULT_ROOT/pages/welcome.md" ]; then
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         cp -r "$SCRIPT_DIR/pages/"* "$VAULT_ROOT/pages/" 2>/dev/null || true
         
-        # Create a dated example journal entry using the current date
+         # Create a dated example journal entry using the current date instead of copying a static file
         today="$(date +%Y-%m-%d)"
         example_journal="$VAULT_ROOT/journals/${today}.md"
         if [ ! -f "$example_journal" ]; then
