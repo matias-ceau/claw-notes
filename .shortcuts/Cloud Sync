@@ -47,27 +47,30 @@ case "$choice" in
         termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Syncing..." --ongoing
         termux-vibrate -d 100
 
-        if "$CLAW_ROOT/.claw/bin/claw-sync" 2>&1; then
+        output=$("$CLAW_ROOT/.claw/bin/claw-sync" 2>&1)
+        if [ $? -eq 0 ]; then
             termux-notification-remove "cloud-sync"
             termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Sync complete"
             termux-toast "Vault synced"
         else
             termux-notification-remove "cloud-sync"
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Sync failed"
-            termux-toast "Sync failed"
+            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Sync failed - check logs"
+            termux-toast "Sync failed: ${output:0:100}"
         fi
         ;;
     "Push to cloud")
         termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Uploading..." --ongoing
         termux-vibrate -d 100
 
-        if "$CLAW_ROOT/.claw/bin/claw-sync" --push 2>&1; then
+        output=$("$CLAW_ROOT/.claw/bin/claw-sync" --push 2>&1)
+        if [ $? -eq 0 ]; then
             termux-notification-remove "cloud-sync"
             termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Upload complete"
             termux-toast "Uploaded to cloud"
         else
             termux-notification-remove "cloud-sync"
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Upload failed"
+            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Upload failed - check logs"
+            termux-toast "Upload failed: ${output:0:100}"
         fi
         ;;
     "Pull from cloud")
@@ -81,15 +84,16 @@ case "$choice" in
             termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Downloading..." --ongoing
             termux-vibrate -d 100
 
-            # Force pull without interactive prompt
-            RCLONE_PATH="${RCLONE_PATH:-ClawNotes-Vault}"
-            if rclone sync "$RCLONE_REMOTE:$RCLONE_PATH" "$VAULT_ROOT" --progress 2>&1; then
+            # Use claw-sync with forced pull (bypass interactive prompt)
+            output=$(echo "y" | "$CLAW_ROOT/.claw/bin/claw-sync" --pull 2>&1)
+            if [ $? -eq 0 ]; then
                 termux-notification-remove "cloud-sync"
                 termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Download complete"
                 termux-toast "Vault restored from cloud"
             else
                 termux-notification-remove "cloud-sync"
-                termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Download failed"
+                termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Download failed - check logs"
+                termux-toast "Download failed: ${output:0:100}"
             fi
         else
             termux-toast "Cancelled"
