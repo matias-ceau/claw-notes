@@ -4,7 +4,7 @@ Context for AI agents working on this system.
 
 ## Purpose
 
-Claw Notes is an **always-on AI assistant platform** for Android, not a CLI tool. The vault stores what the assistant learns and creates. OpenClaw is the brain - it runs 24/7 and integrates with WhatsApp, notifications, and other channels.
+Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenClaw runs 24/7, handles transcription via cloud APIs, and integrates with WhatsApp. This vault is OpenClaw's workspace and memory.
 
 ## Architecture
 
@@ -27,55 +27,86 @@ Claw Notes is an **always-on AI assistant platform** for Android, not a CLI tool
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
         ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │  Whisper │   │   LLM    │   │  Vault   │
-        │ (speech) │   │ (brain)  │   │ (memory) │
+        │ Whisper  │   │   LLM    │   │  Vault   │
+        │(cloud API)│   │ (brain)  │   │ (memory) │
         └──────────┘   └──────────┘   └──────────┘
 ```
 
 ## Key Principle
 
 **The user never touches the terminal.** Everything happens through:
-- WhatsApp messages to the assistant
+- WhatsApp messages (send voice notes directly!)
 - Home screen widget taps
 - Notification actions
-- Share menu (share audio/text to Claw)
 
-The CLI exists only as infrastructure that powers these interfaces.
+The CLI exists only as infrastructure.
+
+## OpenClaw Does the Heavy Lifting
+
+OpenClaw already handles:
+- **Audio transcription** via its media pipeline (OpenAI Whisper API, Groq, Deepgram)
+- **WhatsApp integration** via Baileys
+- **60+ PKM skills** including Logseq integration
+- **44 speech/transcription skills**
+- **Model-agnostic LLM** (OpenAI, OpenRouter, local models)
+
+Don't reinvent these. Configure and use them:
+
+```json
+// ~/.openclaw/openclaw.json
+{
+  "tools": {
+    "media": {
+      "audio": {
+        "enabled": true,
+        "models": [
+          { "provider": "openai", "model": "whisper-1" }
+        ]
+      }
+    }
+  }
+}
+```
+
+See: [OpenClaw Audio Docs](https://docs.openclaw.ai/nodes/audio)
 
 ## File Structure
 
 ```
 claw-notes/
 ├── .shortcuts/              ← Termux:Widget (HOME SCREEN)
-│   ├── Record Voice         ← One-tap record
-│   ├── Ask Assistant        ← Open WhatsApp/chat
-│   ├── Quick Note           ← Dialog → save note
-│   ├── Sync                 ← Git push
-│   └── tasks/               ← Background tasks
-├── .claw/                   ← Infrastructure (hidden)
-│   ├── bin/                 ← CLI tools
-│   ├── lib/                 ← Shared code
-│   ├── boot/                ← Auto-start
-│   ├── hooks/               ← OpenClaw webhooks
-│   └── config/              ← Settings
-├── pages/journals/etc.      ← Vault (assistant's memory)
-└── AGENT.md                 ← This file
+│   ├── Record Voice         ← Record → send to OpenClaw
+│   ├── Quick Note           ← Dialog → save to vault
+│   ├── Journal              ← Add to today's journal
+│   ├── Ask Assistant        ← Query OpenClaw
+│   ├── Sync                 ← Git commit/push
+│   └── tasks/               ← Background processing
+├── .claw/
+│   ├── boot/                ← Auto-start scripts
+│   ├── lib/                 ← Shared config
+│   ├── skills/              ← Workspace skills
+│   └── config/              ← OpenClaw config template
+├── pages/                   ← Topic notes
+├── journals/                ← Daily journals
+├── transcripts/             ← Voice transcripts
+├── summaries/               ← AI summaries
+└── assets/                  ← Audio files
 ```
 
-## OpenClaw Integration
+## Transcription Flow
 
-OpenClaw is the core. It must always be running.
+**Option 1: WhatsApp (recommended)**
+1. Send voice note to your assistant on WhatsApp
+2. OpenClaw auto-transcribes via configured provider
+3. Assistant responds with transcript and can save to vault
 
-### Channels
-- **WhatsApp**: Primary interface via OpenClaw's WhatsApp bridge
-- **Telegram**: Alternative if configured
-- **API**: `http://127.0.0.1:3000/v1/chat/completions`
+**Option 2: Widget**
+1. Tap "Record Voice" widget
+2. Recording saved to `assets/`
+3. Sent to OpenClaw API for transcription
+4. Saved to `transcripts/`
 
-### Webhooks
-OpenClaw can trigger scripts in `.claw/hooks/`:
-- `on-message.sh` - When user sends message
-- `on-voice.sh` - When voice note received
-- `on-reminder.sh` - Scheduled reminders
+**NOT**: Local Whisper (doesn't work on Termux)
 
 ## Android Constraints
 
@@ -87,80 +118,47 @@ os.networkInterfaces = () => ({});
 ```
 
 ### Network
-Use `127.0.0.1` only. Wildcard `0.0.0.0` crashes on non-rooted Android.
+Use `127.0.0.1` only. Never `0.0.0.0` on non-rooted Android.
 
 ### Background Processes
 Android kills idle processes. Solutions:
+- Foreground notification (persistent)
 - `termux-wake-lock` during operations
 - Watchdog auto-restart in `.claw/boot/`
-- Foreground notification to prevent kill
 
 ### Storage
-SAF (Scoped Access Framework) via `termux-setup-storage`.
-Vault at `~/storage/shared/Documents/claw-notes`.
-
-## Mobile UX Commands
-
-These power the widgets (user never types these):
-
-```bash
-# Widget: Record Voice
-termux-microphone-record -l 300 -f "$ASSETS/recording.m4a"
-termux-notification -t "Recording..." --ongoing
-# ... then transcribe + process
-
-# Widget: Quick Note
-text=$(termux-dialog text -t "Quick Note" | jq -r '.text')
-# ... save to vault
-
-# Widget: Ask Assistant
-termux-open-url "https://wa.me/..."  # Or OpenClaw chat URL
-
-# Notification feedback (not terminal)
-termux-notification -t "Note saved" -c "Meeting notes processed"
-termux-toast "Synced!"
-```
-
-## Vault Format
-
-Markdown with YAML frontmatter, compatible with Logseq/Obsidian:
-
-```markdown
----
-type: note|journal|transcript|summary
-created: 2026-02-05T10:30:00Z
-source: voice|whatsapp|widget|manual
-tags: []
----
-
-# Title
-
-Content with [[wikilinks]] and #tags
-```
+SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/claw-notes`.
 
 ## Adding Features
+
+### Use OpenClaw Skills First
+Before building custom:
+1. Check [awesome-openclaw-skills](https://github.com/VoltAgent/awesome-openclaw-skills)
+2. Install: `npx clawhub@latest install <skill-slug>`
+3. 1700+ community skills available
 
 ### New Widget
 1. Create script in `.shortcuts/NewWidget`
 2. Use `termux-dialog` for input
 3. Use `termux-notification` for feedback
-4. Never require terminal interaction
+4. Call OpenClaw API or save directly to vault
 
-### New Webhook
-1. Create script in `.claw/hooks/on-event.sh`
-2. Configure in OpenClaw
-3. Process silently, notify on completion
-
-### New Command (infrastructure only)
-1. Create `.claw/bin/claw-newcmd`
-2. Source `../lib/config.sh`
-3. Add to `.claw/bin/claw` dispatch
-4. Wire to widget or webhook
+### New Skill (for OpenClaw)
+1. Create `.claw/skills/<name>/SKILL.md`
+2. Define commands and triggers
+3. OpenClaw auto-discovers workspace skills
 
 ## Critical Behaviors
 
 1. **OpenClaw must always run** - Watchdog ensures this
-2. **No terminal output for users** - Use notifications/toasts
-3. **Fail silently with notification** - Don't break the experience
-4. **Auto-sync regularly** - User shouldn't think about git
-5. **Process voice async** - Record fast, process in background
+2. **No terminal for users** - Everything via widgets/WhatsApp
+3. **Use cloud APIs** - Local Whisper doesn't work on Termux
+4. **Leverage OpenClaw skills** - Don't reinvent PKM features
+5. **Notification feedback** - No terminal output
+
+## Relevant Links
+
+- [OpenClaw Docs](https://docs.openclaw.ai/)
+- [Audio Transcription](https://docs.openclaw.ai/nodes/audio)
+- [Awesome Skills](https://github.com/VoltAgent/awesome-openclaw-skills)
+- [OpenAI Whisper API](https://platform.openai.com/docs/api-reference/audio)

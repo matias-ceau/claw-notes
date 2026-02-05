@@ -1,0 +1,102 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Background task: Send audio to OpenClaw
+# OpenClaw handles transcription via its audio pipeline (OpenAI Whisper API, etc.)
+
+CLAW_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+AUDIO="$1"
+NAME="$2"
+
+if [ -z "$AUDIO" ] || [ ! -f "$AUDIO" ]; then
+    notify "Error" "No audio file" "claw-error"
+    exit 1
+fi
+
+termux-wake-lock
+notify_ongoing "Processing" "Transcribing audio..." "claw-process"
+
+# Check if OpenClaw is running
+if ! openclaw_running; then
+    notify "Starting assistant..." "" "claw-process"
+    "$CLAW_ROOT/.claw/boot/watchdog.sh" --daemon 2>/dev/null
+    sleep 3
+fi
+
+# Send audio to OpenClaw via the chat API with media attachment
+# OpenClaw's audio pipeline auto-transcribes and returns the text
+AUDIO_BASE64=$(base64 -w 0 "$AUDIO")
+AUDIO_TYPE="audio/mp4"
+
+RESPONSE=$(curl -s "http://$OPENCLAW_HOST:$OPENCLAW_PORT/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n \
+        --arg audio "$AUDIO_BASE64" \
+        --arg type "$AUDIO_TYPE" \
+        --arg name "$NAME" \
+        '{
+            model: "default",
+            messages: [{
+                role: "user",
+                content: [
+                    {
+                        type: "text",
+                        text: "Transcribe this voice note and save it. Name: \($name)"
+                    },
+                    {
+                        type: "input_audio",
+                        input_audio: {
+                            data: $audio,
+                            format: "mp4"
+                        }
+                    }
+                ]
+            }]
+        }')" 2>/dev/null)
+
+notify_clear "claw-process"
+termux-wake-unlock
+
+# Check response
+CONTENT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty' 2>/dev/null)
+
+if [ -n "$CONTENT" ]; then
+    # Save transcript to vault
+    TRANSCRIPT="$VAULT_TRANSCRIPTS_RAW/${NAME}.md"
+    cat > "$TRANSCRIPT" << EOF
+---
+type: transcript
+created: $(date -Iseconds)
+source: voice
+audio: $(basename "$AUDIO")
+---
+
+# Voice Note: $NAME
+
+$CONTENT
+EOF
+
+    notify "Transcribed" "Tap to view" "claw-done"
+    termux-vibrate -d 200
+else
+    # Fallback: save audio reference for later
+    TRANSCRIPT="$VAULT_TRANSCRIPTS_RAW/${NAME}.md"
+    cat > "$TRANSCRIPT" << EOF
+---
+type: transcript
+created: $(date -Iseconds)
+source: voice
+audio: $(basename "$AUDIO")
+status: pending
+---
+
+# Voice Note: $NAME
+
+*Transcription pending - audio saved to assets/*
+
+Send this audio to your assistant via WhatsApp for processing.
+EOF
+
+    notify "Saved" "Audio ready for WhatsApp" "claw-done"
+    termux-vibrate -d 100
+fi

@@ -2,8 +2,8 @@
 #
 # Claw Notes - Setup Script
 #
-# Installs dependencies, sets up widgets, starts the assistant.
-# After setup, you interact via widgets and notifications - no CLI needed.
+# Sets up OpenClaw as your always-on AI assistant.
+# Transcription uses cloud APIs (OpenAI Whisper API), not local models.
 
 set -e
 
@@ -19,7 +19,6 @@ NC='\033[0m'
 step() { echo -e "${CYAN}[$1/$2]${NC} $3"; }
 ok() { echo -e "${GREEN}  ✓${NC} $1"; }
 warn() { echo -e "${YELLOW}  !${NC} $1"; }
-fail() { echo -e "${RED}  ✗${NC} $1"; }
 
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -32,11 +31,11 @@ if [ -d "/data/data/com.termux" ]; then
     ENV="termux"
 else
     ENV="linux"
-    warn "Not running in Termux. Widget features won't work."
+    warn "Not running in Termux. Some features won't work."
     echo ""
 fi
 
-TOTAL=9
+TOTAL=8
 
 # Step 1: Update packages
 step 1 $TOTAL "Updating packages..."
@@ -44,55 +43,28 @@ if [ "$ENV" = "termux" ]; then
     pkg update -y > /dev/null 2>&1 && pkg upgrade -y > /dev/null 2>&1
     ok "Packages updated"
 else
-    ok "Skipped (not Termux)"
+    ok "Skipped"
 fi
 
 # Step 2: Install core dependencies
 step 2 $TOTAL "Installing Node.js, Git, Termux:API..."
 if [ "$ENV" = "termux" ]; then
-    pkg install -y nodejs-lts git termux-api jq > /dev/null 2>&1
+    pkg install -y nodejs-lts git termux-api jq curl > /dev/null 2>&1
     ok "Core dependencies installed"
 else
-    ok "Please ensure nodejs, git, jq are installed"
+    ok "Ensure nodejs, git, jq, curl are installed"
 fi
 
-# Step 3: Install Python + FFmpeg
-step 3 $TOTAL "Installing Python and FFmpeg..."
-if [ "$ENV" = "termux" ]; then
-    pkg install -y python ffmpeg > /dev/null 2>&1
-    ok "Python and FFmpeg installed"
-else
-    ok "Please ensure python and ffmpeg are installed"
-fi
-
-# Step 4: Install Whisper
-step 4 $TOTAL "Installing Whisper (speech-to-text)..."
-if pip install --quiet openai-whisper 2>/dev/null; then
-    ok "Whisper installed"
-else
-    warn "Whisper failed - transcription may not work"
-fi
-
-# Step 5: Install OpenClaw
-step 5 $TOTAL "Installing OpenClaw..."
+# Step 3: Install OpenClaw
+step 3 $TOTAL "Installing OpenClaw..."
 if npm install -g openclaw > /dev/null 2>&1; then
     ok "OpenClaw installed"
 else
-    warn "OpenClaw failed - assistant features limited"
+    warn "OpenClaw install failed - try: npm install -g openclaw"
 fi
 
-# Step 6: Configure OpenClaw for Android
-step 6 $TOTAL "Configuring for Android..."
-if command -v openclaw &> /dev/null; then
-    openclaw config set gateway.host 127.0.0.1 2>/dev/null || true
-    openclaw config set gateway.port 3000 2>/dev/null || true
-    ok "OpenClaw configured (127.0.0.1:3000)"
-else
-    warn "OpenClaw not found"
-fi
-
-# Step 7: Setup storage
-step 7 $TOTAL "Setting up storage access..."
+# Step 4: Setup storage
+step 4 $TOTAL "Setting up storage access..."
 if [ "$ENV" = "termux" ]; then
     if [ ! -d "$HOME/storage" ]; then
         echo "    Grant storage permission when prompted..."
@@ -101,51 +73,142 @@ if [ "$ENV" = "termux" ]; then
     fi
     ok "Storage access ready"
 else
-    ok "Skipped (not Termux)"
+    ok "Skipped"
 fi
 
-# Step 8: Setup widgets
-step 8 $TOTAL "Setting up home screen widgets..."
+# Step 5: Configure API keys for transcription
+step 5 $TOTAL "Configuring API keys..."
+echo ""
+echo "    OpenClaw uses cloud APIs for voice transcription."
+echo "    You need at least one API key (OpenAI recommended)."
+echo ""
+
+OPENCLAW_DIR="$HOME/.openclaw"
+OPENCLAW_CONFIG="$OPENCLAW_DIR/openclaw.json"
+mkdir -p "$OPENCLAW_DIR"
+
+CONFIGURE_KEYS=true
+if [ -f "$OPENCLAW_CONFIG" ]; then
+    echo "    Found existing config at $OPENCLAW_CONFIG"
+    read -p "    Update API keys? [y/N] " -n 1 -r
+    echo ""
+    [[ ! $REPLY =~ ^[Yy]$ ]] && CONFIGURE_KEYS=false
+fi
+
+if [ "$CONFIGURE_KEYS" = true ]; then
+    echo ""
+    # Use -s flag to hide API key input
+    read -sp "    OpenAI API key: " OPENAI_KEY
+    echo ""
+    read -sp "    OpenRouter API key (optional): " OPENROUTER_KEY
+    echo ""
+    echo ""
+
+    # Validate at least one key provided
+    if [ -z "$OPENAI_KEY" ] && [ -z "$OPENROUTER_KEY" ]; then
+        warn "No API keys provided - transcription won't work"
+    fi
+
+    # Determine which provider to use for audio transcription
+    if [ -n "$OPENAI_KEY" ]; then
+        AUDIO_PROVIDER="openai"
+        AUDIO_MODEL="whisper-1"
+    elif [ -n "$OPENROUTER_KEY" ]; then
+        AUDIO_PROVIDER="openrouter"
+        AUDIO_MODEL="openai/whisper-large-v3"
+    else
+        AUDIO_PROVIDER="openai"
+        AUDIO_MODEL="whisper-1"
+    fi
+
+    # Build config safely using jq to handle special characters in keys/paths
+    CONFIG=$(jq -n \
+        --arg workspace "$SCRIPT_DIR" \
+        --arg openai_key "$OPENAI_KEY" \
+        --arg openrouter_key "$OPENROUTER_KEY" \
+        --arg audio_provider "$AUDIO_PROVIDER" \
+        --arg audio_model "$AUDIO_MODEL" \
+        '{
+            gateway: { host: "127.0.0.1", port: 3000 },
+            workspace: { root: $workspace },
+            providers: (
+                {}
+                | if $openai_key != "" then . + { openai: { apiKey: $openai_key } } else . end
+                | if $openrouter_key != "" then . + { openrouter: { apiKey: $openrouter_key } } else . end
+            ),
+            tools: {
+                media: {
+                    audio: {
+                        enabled: true,
+                        models: [{ provider: $audio_provider, model: $audio_model }]
+                    }
+                }
+            },
+            channels: { whatsapp: { enabled: true } }
+        }')
+
+    echo "$CONFIG" > "$OPENCLAW_CONFIG"
+    ok "Config saved"
+else
+    ok "Keeping existing config"
+fi
+
+# Step 6: Setup widgets
+step 6 $TOTAL "Setting up home screen widgets..."
 chmod +x "$SCRIPT_DIR/.shortcuts/"* 2>/dev/null || true
 chmod +x "$SCRIPT_DIR/.shortcuts/tasks/"* 2>/dev/null || true
 chmod +x "$SCRIPT_DIR/.claw/bin/"* 2>/dev/null || true
 chmod +x "$SCRIPT_DIR/.claw/boot/"* 2>/dev/null || true
 
 if [ "$ENV" = "termux" ]; then
-    # Link widgets to Termux:Widget location
     mkdir -p "$HOME/.shortcuts/tasks"
 
-    # Link each widget
     for widget in "$SCRIPT_DIR/.shortcuts/"*; do
-        [ -d "$widget" ] && continue  # Skip directories
+        [ -d "$widget" ] && continue
         name=$(basename "$widget")
         ln -sf "$widget" "$HOME/.shortcuts/$name" 2>/dev/null || true
     done
 
-    # Link background tasks
     for task in "$SCRIPT_DIR/.shortcuts/tasks/"*; do
         name=$(basename "$task")
         ln -sf "$task" "$HOME/.shortcuts/tasks/$name" 2>/dev/null || true
     done
 
     ok "Widgets linked to ~/.shortcuts/"
-    echo "    Add Termux:Widget to your home screen"
 else
-    ok "Scripts ready (widgets require Termux)"
+    ok "Scripts ready"
 fi
 
-# Step 9: Start assistant
-step 9 $TOTAL "Starting assistant..."
+# Step 7: WhatsApp setup
+step 7 $TOTAL "WhatsApp integration..."
+if command -v openclaw &> /dev/null; then
+    echo ""
+    echo "    To connect WhatsApp, run: openclaw onboard"
+    echo "    This scans a QR code to link your WhatsApp."
+    echo ""
+    read -p "    Run WhatsApp setup now? [Y/n] " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        openclaw onboard
+    else
+        ok "Run 'openclaw onboard' later for WhatsApp"
+    fi
+else
+    warn "Install OpenClaw first, then run 'openclaw onboard'"
+fi
+
+# Step 8: Start assistant
+step 8 $TOTAL "Starting assistant..."
 if command -v openclaw &> /dev/null && [ "$ENV" = "termux" ]; then
     "$SCRIPT_DIR/.claw/boot/watchdog.sh" --daemon 2>/dev/null
     sleep 2
     if pgrep -f "openclaw" > /dev/null 2>&1; then
         ok "Assistant running"
     else
-        warn "Assistant didn't start - run manually later"
+        warn "Start manually: openclaw gateway"
     fi
 else
-    warn "Skipped - start manually with: claw start"
+    warn "Start later with: openclaw gateway"
 fi
 
 echo ""
@@ -155,36 +218,27 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 
 if [ "$ENV" = "termux" ]; then
-    echo "Next steps:"
+    echo "How to use:"
     echo ""
     echo "  1. Add Termux:Widget to your home screen"
-    echo "     (long press → widgets → Termux:Widget)"
     echo ""
-    echo "  2. Tap widgets to:"
-    echo "     • Record Voice - capture voice notes"
-    echo "     • Quick Note   - text notes"
-    echo "     • Journal      - daily entries"
-    echo "     • Ask Assistant - quick questions"
+    echo "  2. Tap 'Record Voice' → transcribes via OpenAI"
     echo ""
-    echo "  3. For auto-start on boot:"
+    echo "  3. Or just send voice notes to your assistant"
+    echo "     on WhatsApp! It transcribes automatically."
+    echo ""
+    echo "  4. Auto-start on boot:"
     echo "     cp .claw/boot/start-claw.sh ~/.termux/boot/"
     echo ""
-    echo "You should see a persistent notification with"
-    echo "quick actions. No terminal needed from here!"
-    echo ""
 
-    # Show notification
     if command -v termux-notification &> /dev/null; then
         termux-notification \
             --title "Claw Notes Ready" \
-            --content "Add Termux:Widget to home screen" \
-            --button1 "OK" \
-            --button1-action "termux-notification-remove claw-setup"
+            --content "Add Termux:Widget or use WhatsApp"
     fi
 else
-    echo "CLI usage (for non-Android):"
-    echo "  export PATH=\"\$PATH:$SCRIPT_DIR/.claw/bin\""
-    echo "  claw start"
-    echo "  claw full my-note"
+    echo "Usage:"
+    echo "  openclaw gateway   # Start the assistant"
+    echo "  openclaw onboard   # Connect WhatsApp"
     echo ""
 fi

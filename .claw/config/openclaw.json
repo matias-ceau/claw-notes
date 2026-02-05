@@ -1,0 +1,47 @@
+{
+  "$schema": "https://openclaw.ai/schemas/config.json",
+  "gateway": {
+    "host": "127.0.0.1",
+    "port": 3000
+  },
+  "workspace": {
+    "root": "~/storage/shared/Documents/claw-notes"
+  },
+  "providers": {
+    "openai": {
+      "apiKey": "${OPENAI_API_KEY}"
+    },
+    "openrouter": {
+      "apiKey": "${OPENROUTER_API_KEY}"
+    }
+  },
+  "tools": {
+    "media": {
+      "audio": {
+        "enabled": true,
+        "maxBytes": 26214400,
+        "models": [
+          {
+            "provider": "openai",
+            "model": "whisper-1"
+          },
+          {
+            "provider": "openrouter",
+            "model": "openai/whisper-large-v3"
+          }
+        ]
+      }
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true
+    }
+  },
+  "skills": {
+    "logseq": {
+      "enabled": true,
+      "graphPath": "~/storage/shared/Documents/claw-notes"
+    }
+  }
+}

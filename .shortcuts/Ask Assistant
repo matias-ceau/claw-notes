@@ -44,11 +44,17 @@ if [ -n "$ANSWER" ]; then
     SHORT=$(echo "$ANSWER" | head -c 200)
     [ ${#ANSWER} -gt 200 ] && SHORT="${SHORT}..."
 
+    # Save answer to unique temp file for safe clipboard copy
+    # Uses PID + timestamp to avoid race conditions with overlapping notifications
+    ANSWER_FILE="$CLAW_CACHE/answer_$$_$(date +%s).txt"
+    mkdir -p "$CLAW_CACHE"
+    printf '%s' "$ANSWER" > "$ANSWER_FILE"
+
     termux-notification \
         --title "Assistant" \
         --content "$SHORT" \
         --button1 "Copy" \
-        --button1-action "echo '$ANSWER' | termux-clipboard-set && termux-toast 'Copied'"
+        --button1-action "termux-clipboard-set < '$ANSWER_FILE' && termux-toast 'Copied'"
 
     # Also save to pages if substantial
     if [ ${#ANSWER} -gt 100 ]; then

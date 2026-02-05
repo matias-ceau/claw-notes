@@ -1,18 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Claw Notes - Main Entry Point
+# Claw Notes - CLI Entry Point (infrastructure only)
 #
-# Usage: claw <command> [args]
-#
-# Commands:
-#   record    Record a voice note
-#   note      Create a quick text note
-#   transcribe Transcribe an audio file
-#   process   Process transcript with LLM
-#   journal   Open/create today's journal
-#   sync      Git sync (commit & push)
-#   start     Start OpenClaw gateway
-#   stop      Stop OpenClaw gateway
-#   status    Show system status
+# NOTE: Users interact via widgets and WhatsApp, not this CLI.
+# This exists for debugging and automation.
 
 set -e
 
@@ -21,44 +11,31 @@ source "$SCRIPT_DIR/../lib/config.sh"
 
 show_help() {
     cat << 'EOF'
-Claw Notes - Voice-to-Markdown Notes System
+Claw Notes - CLI (for debugging/automation)
 
-Usage: claw <command> [args]
+NOTE: Normal usage is via widgets or WhatsApp, not this CLI.
 
 Commands:
-  record [name]       Record voice note (default: timestamp)
+  record [name]       Record voice note → send to OpenClaw
   note <title>        Create quick text note
-  transcribe <file>   Transcribe audio file with Whisper
-  process <file>      Clean transcript with LLM
-  full [name]         Record → Transcribe → Process (full pipeline)
   journal [text]      Add to today's journal
   sync [message]      Git commit and push
   start               Start OpenClaw gateway
   stop                Stop OpenClaw gateway
   status              Show system status
-  help                Show this help
 
-Examples:
-  claw record meeting       # Record "meeting_2024-01-15_10-30-00.m4a"
-  claw full ideas           # Full pipeline: record → transcribe → process
-  claw journal "Met with team about project X"
-  claw sync "Added meeting notes"
-
-Environment:
-  CLAW_ROOT           Override vault location
-  WHISPER_MODEL       Whisper model (tiny/base/small/medium/large)
-  OPENCLAW_PORT       OpenClaw gateway port (default: 3000)
+Voice transcription is handled by OpenClaw's audio pipeline.
+Send voice notes via WhatsApp for the best experience.
 EOF
 }
 
 cmd_status() {
     echo "=== Claw Notes Status ==="
     echo ""
-    echo "Environment: $CLAW_ENV"
     echo "Vault: $CLAW_ROOT"
     echo ""
 
-    echo "Directories:"
+    echo "Notes:"
     for dir in "$VAULT_PAGES" "$VAULT_JOURNALS" "$VAULT_TRANSCRIPTS_RAW"; do
         if [ -d "$dir" ]; then
             count=$(find "$dir" -type f -name "*.md" 2>/dev/null | wc -l)
@@ -67,17 +44,11 @@ cmd_status() {
     done
     echo ""
 
-    echo "Services:"
+    echo "OpenClaw:"
     if openclaw_running; then
-        log_ok "OpenClaw: running"
+        log_ok "Running on $OPENCLAW_HOST:$OPENCLAW_PORT"
     else
-        log_warn "OpenClaw: stopped"
-    fi
-
-    if command -v whisper &> /dev/null; then
-        log_ok "Whisper: installed"
-    else
-        log_warn "Whisper: not installed"
+        log_warn "Not running (start with: claw start)"
     fi
     echo ""
 
@@ -85,11 +56,11 @@ cmd_status() {
     if [ -d "$CLAW_ROOT/.git" ]; then
         cd "$CLAW_ROOT"
         branch=$(git branch --show-current 2>/dev/null || echo "unknown")
-        status=$(git status --porcelain 2>/dev/null | wc -l)
+        changes=$(git status --porcelain 2>/dev/null | wc -l)
         echo "  Branch: $branch"
-        echo "  Uncommitted changes: $status"
+        echo "  Uncommitted: $changes"
     else
-        log_warn "Not a git repository"
+        log_warn "Not a git repo"
     fi
 }
 
@@ -99,7 +70,7 @@ cmd_start() {
         return 0
     fi
 
-    log_info "Starting OpenClaw gateway..."
+    log_info "Starting OpenClaw..."
 
     if is_termux; then
         termux-wake-lock 2>/dev/null || true
@@ -114,9 +85,17 @@ cmd_start() {
 
     sleep 2
     if openclaw_running; then
-        log_ok "OpenClaw started on $OPENCLAW_HOST:$OPENCLAW_PORT"
+        log_ok "OpenClaw started"
+        # Show notification on Termux
+        if is_termux; then
+            termux-notification \
+                --id claw-assistant \
+                --title "Claw Assistant" \
+                --content "Running" \
+                --ongoing 2>/dev/null || true
+        fi
     else
-        log_error "Failed to start OpenClaw"
+        log_error "Failed to start"
         return 1
     fi
 }
@@ -132,9 +111,10 @@ cmd_stop() {
 
     if is_termux; then
         termux-wake-unlock 2>/dev/null || true
+        termux-notification-remove claw-assistant 2>/dev/null || true
     fi
 
-    log_ok "OpenClaw stopped"
+    log_ok "Stopped"
 }
 
 cmd_sync() {
@@ -147,15 +127,15 @@ cmd_sync() {
         return 0
     fi
 
-    log_info "Syncing changes..."
+    log_info "Syncing..."
     git add -A
     git commit -m "$msg"
 
     if git remote -v | grep -q origin; then
-        git push origin HEAD 2>/dev/null && log_ok "Pushed to remote" || log_warn "Push failed (offline?)"
+        git push origin HEAD 2>/dev/null && log_ok "Pushed" || log_warn "Push failed"
     fi
 
-    log_ok "Synced: $msg"
+    log_ok "Synced"
 }
 
 # Dispatch
@@ -167,18 +147,6 @@ case "${1:-help}" in
     note)
         shift
         "$CLAW_BIN/claw-note" "$@"
-        ;;
-    transcribe)
-        shift
-        "$CLAW_BIN/claw-transcribe" "$@"
-        ;;
-    process)
-        shift
-        "$CLAW_BIN/claw-process" "$@"
-        ;;
-    full)
-        shift
-        "$CLAW_BIN/claw-full" "$@"
         ;;
     journal)
         shift

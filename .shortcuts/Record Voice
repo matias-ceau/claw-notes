@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Widget: Record Voice Note
-# One-tap voice recording with notification feedback
+# Records audio and sends to OpenClaw for transcription
 
 CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$CLAW_ROOT/.claw/lib/config.sh"
@@ -14,7 +14,7 @@ AUDIO="$VAULT_ASSETS/${NAME}.m4a"
 termux-notification \
     --id claw-record \
     --title "Recording..." \
-    --content "Tap to stop" \
+    --content "Tap Stop when done" \
     --ongoing \
     --button1 "Stop" \
     --button1-action "termux-microphone-record -q"
@@ -25,15 +25,18 @@ termux-microphone-record -f "$AUDIO" -l "$RECORD_LIMIT"
 
 # Clear recording notification
 termux-notification-remove claw-record
-termux-wake-unlock
 
 # Check if we got audio
 if [ ! -f "$AUDIO" ] || [ ! -s "$AUDIO" ]; then
-    termux-toast "Recording failed"
-    exit 1
+    termux-wake-unlock
+    termux-toast "Recording cancelled"
+    exit 0
 fi
 
-termux-toast "Recorded! Processing..."
+termux-toast "Sending to assistant..."
 
-# Process in background
-"$CLAW_ROOT/.shortcuts/tasks/process-voice" "$AUDIO" "$NAME" &
+# Send to OpenClaw for processing
+# OpenClaw handles transcription via its audio pipeline
+"$CLAW_ROOT/.shortcuts/tasks/send-to-openclaw" "$AUDIO" "$NAME" &
+
+termux-wake-unlock
