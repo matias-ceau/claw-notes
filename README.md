@@ -1,169 +1,95 @@
 # Claw Notes
 
-Voice-to-markdown notes system for Android using OpenClaw, Termux, and AI-powered transcription.
+Voice-to-markdown notes for Android. Record → Transcribe → Clean → Sync.
 
-## Overview
+## What It Does
 
-Claw Notes captures voice notes on Android, transcribes them using AI, and saves them as markdown files compatible with [Logseq](https://logseq.com/) and [Obsidian](https://obsidian.md/). Notes are synced via Git for version control and backup.
+1. **Record** voice notes on your phone
+2. **Transcribe** with Whisper (local, offline)
+3. **Clean up** rambling transcripts with LLM
+4. **Sync** to git for backup and cross-device access
 
-## Approach Comparison
+Works with Logseq, Obsidian, or any markdown-based PKM.
 
-Three implementation approaches were explored during development:
-
-| Feature | Approach 1: Boot Persistence | Approach 2: Whisper + AI | Approach 3: Compact SAF |
-|---------|------------------------------|--------------------------|-------------------------|
-| **Complexity** | Moderate | High | Low |
-| **Auto-restart** | Yes (watchdog) | Yes | No |
-| **Transcription** | Basic | Whisper + LLM cleanup | Basic |
-| **Output** | Single markdown | Raw + Cleaned + Summary | Single markdown |
-| **Setup time** | ~15 min | ~30 min | ~10 min |
-| **Dependencies** | Node.js, Termux:API, Termux:Boot | + Python, FFmpeg, Whisper | Node.js, Termux:API |
-
-### Recommendation: Tiered Approach
-
-**Start with Approach 3** (Compact SAF) for quick deployment, then optionally upgrade:
-
-1. **Quick Start** - Approach 3: Minimal setup, get started immediately
-2. **Production** - Approach 1: Add boot persistence when you need reliability
-3. **Power User** - Approach 2: Add Whisper when you need transcript cleanup from ramblings
-
-## Quick Start (Approach 3 - Recommended)
-
-### Prerequisites
-
-- Android device with [Termux](https://f-droid.org/packages/com.termux/) from F-Droid
-- [Termux:API](https://f-droid.org/packages/com.termux.api/) from F-Droid
-
-### Installation
+## Quick Start
 
 ```bash
-# [1/7] Update packages
-pkg update && pkg upgrade -y
+# Clone to your Android device (in Termux)
+cd ~/storage/shared/Documents
+git clone <this-repo> claw-notes
+cd claw-notes
 
-# [2/7] Install dependencies
-pkg install -y nodejs-lts git termux-api
+# Run setup
+bash setup.sh
 
-# [3/7] Configure storage access
-termux-setup-storage
+# Add to PATH
+export PATH="$PATH:$(pwd)/.claw/bin"
 
-# [4/7] Install OpenClaw
-npm install -g openclaw
-
-# [5/7] Create Android compatibility shim
-mkdir -p ~/.openclaw
-cat > ~/.openclaw/hijack.js << 'EOF'
-const os = require('os');
-os.networkInterfaces = () => ({});
-EOF
-
-# [6/7] Configure OpenClaw
-openclaw config set gateway.host 127.0.0.1
-openclaw config set gateway.port 3000
-
-# [7/7] Start OpenClaw
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway
+# Record your first note
+claw full my-first-note
 ```
 
-### Setting Up Notes Directory
+## Commands
 
 ```bash
-# Create notes directory with SAF access
-mkdir -p ~/storage/shared/Documents/claw-notes
-
-# Initialize git repo
-cd ~/storage/shared/Documents/claw-notes
-git init
+claw record [name]     # Record voice note
+claw full [name]       # Full pipeline: record → transcribe → process
+claw transcribe <file> # Transcribe audio with Whisper
+claw process <file>    # Clean transcript with LLM
+claw journal [text]    # Add to today's journal
+claw note <title>      # Create quick text note
+claw sync [message]    # Git commit and push
+claw start             # Start OpenClaw gateway
+claw stop              # Stop gateway
+claw status            # Show system status
 ```
 
-## Production Setup (Approach 1)
-
-Add boot persistence to automatically restart on crashes:
-
-```bash
-# Install Termux:Boot from F-Droid
-pkg install termux-services
-
-# Create boot script
-mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/start-openclaw.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-termux-wake-lock
-
-# Start OpenClaw
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway &
-
-# Watchdog - restart if crashed
-while true; do
-  sleep 300
-  if ! pgrep -f "openclaw"; then
-    node -r ~/.openclaw/hijack.js $(which openclaw) gateway &
-  fi
-done &
-EOF
-
-chmod +x ~/.termux/boot/start-openclaw.sh
-```
-
-## Power User Setup (Approach 2)
-
-Add Whisper for intelligent transcript processing:
-
-```bash
-# Install additional dependencies
-pkg install -y python ffmpeg
-
-# Install Whisper
-pip install openai-whisper
-
-# Create vault structure
-mkdir -p ~/storage/shared/Documents/claw-notes/{pages,journals,transcripts/{raw,cleaned},assets}
-```
-
-### Vault Structure
+## Structure
 
 ```
 claw-notes/
-├── pages/           # Topic-based notes
-├── journals/        # Daily notes
+├── pages/              # Topic notes
+├── journals/           # Daily notes (YYYY-MM-DD.md)
 ├── transcripts/
-│   ├── raw/         # Unprocessed Whisper output
-│   └── cleaned/     # LLM-processed transcripts
-├── assets/          # Audio files, images
-└── summaries/       # AI-generated summaries
+│   ├── raw/            # Direct Whisper output
+│   └── cleaned/        # LLM-processed versions
+├── summaries/          # AI-generated summaries
+├── assets/             # Audio files, images
+├── templates/          # Note templates
+└── .claw/              # CLI tooling (hidden)
 ```
 
-## Technical Notes
+## Requirements
 
-### Android Compatibility
+- Android with Termux (from F-Droid)
+- Termux:API (from F-Droid)
+- Node.js, Python, FFmpeg, Whisper, OpenClaw
 
-The `hijack.js` shim is required because Android blocks `os.networkInterfaces()` on non-rooted devices (System Error 13). The shim mocks this function.
+## Output Example
 
-### Network Binding
+One voice recording produces three files:
 
-Use `127.0.0.1` (loopback) instead of `0.0.0.0` to avoid crashes on non-rooted Android.
+| File | Purpose |
+|------|---------|
+| `transcripts/raw/idea_transcript.md` | Exact Whisper output |
+| `transcripts/cleaned/idea_cleaned.md` | Coherent, readable version |
+| `summaries/idea_summary.md` | Key points + action items |
 
-### Wake Lock
+## Auto-Start
 
-Use `termux-wake-lock` to prevent Android from killing the process during audio processing.
+For automatic startup on boot (requires Termux:Boot):
 
-## Workflow
+```bash
+cp .claw/boot/start-claw.sh ~/.termux/boot/
+chmod +x ~/.termux/boot/start-claw.sh
+```
 
-1. **Capture**: Record voice note using Termux:API microphone
-2. **Transcribe**: Process audio with Whisper (Approach 2) or basic recognition
-3. **Clean**: Optionally process with OpenClaw LLM for coherent output
-4. **Save**: Write markdown to notes directory
-5. **Sync**: Git commit and push
+## Documentation
 
-## Compatibility
-
-- **Note Apps**: Logseq, Obsidian, any markdown-based PKM
-- **Android**: 7.0+ (Termux requirement)
-- **Storage**: Uses Android SAF (Scoped Access Framework) for Documents folder access
+- [[pages/welcome]] - Getting started
+- [[pages/workflow]] - How the pipeline works
+- [[pages/setup]] - Detailed installation
 
 ## License
 
 MIT
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

@@ -1,0 +1,54 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - Journal Entry
+#
+# Usage: claw-journal [text]
+#        claw-journal           # Opens today's journal
+#        claw-journal "text"    # Appends text to today's journal
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+ensure_dirs
+
+TODAY=$(today)
+JOURNAL_FILE="$VAULT_JOURNALS/${TODAY}.md"
+
+# Create journal if doesn't exist
+if [ ! -f "$JOURNAL_FILE" ]; then
+    cat > "$JOURNAL_FILE" << EOF
+---
+type: journal
+date: $TODAY
+created: $(date -Iseconds)
+---
+
+# $TODAY
+
+EOF
+    log_info "Created journal: $JOURNAL_FILE"
+fi
+
+# If text provided, append it
+if [ -n "$1" ]; then
+    TIMESTAMP=$(date '+%H:%M')
+    echo "" >> "$JOURNAL_FILE"
+    echo "## $TIMESTAMP" >> "$JOURNAL_FILE"
+    echo "" >> "$JOURNAL_FILE"
+    echo "$*" >> "$JOURNAL_FILE"
+    echo "" >> "$JOURNAL_FILE"
+    log_ok "Added entry to journal"
+else
+    # Just show the journal path
+    log_info "Journal: $JOURNAL_FILE"
+
+    # If editor available, open it
+    if [ -n "$EDITOR" ]; then
+        $EDITOR "$JOURNAL_FILE"
+    else
+        cat "$JOURNAL_FILE"
+    fi
+fi
+
+echo "$JOURNAL_FILE"

@@ -1,0 +1,208 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - Main Entry Point
+#
+# Usage: claw <command> [args]
+#
+# Commands:
+#   record    Record a voice note
+#   note      Create a quick text note
+#   transcribe Transcribe an audio file
+#   process   Process transcript with LLM
+#   journal   Open/create today's journal
+#   sync      Git sync (commit & push)
+#   start     Start OpenClaw gateway
+#   stop      Stop OpenClaw gateway
+#   status    Show system status
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+show_help() {
+    cat << 'EOF'
+Claw Notes - Voice-to-Markdown Notes System
+
+Usage: claw <command> [args]
+
+Commands:
+  record [name]       Record voice note (default: timestamp)
+  note <title>        Create quick text note
+  transcribe <file>   Transcribe audio file with Whisper
+  process <file>      Clean transcript with LLM
+  full [name]         Record → Transcribe → Process (full pipeline)
+  journal [text]      Add to today's journal
+  sync [message]      Git commit and push
+  start               Start OpenClaw gateway
+  stop                Stop OpenClaw gateway
+  status              Show system status
+  help                Show this help
+
+Examples:
+  claw record meeting       # Record "meeting_2024-01-15_10-30-00.m4a"
+  claw full ideas           # Full pipeline: record → transcribe → process
+  claw journal "Met with team about project X"
+  claw sync "Added meeting notes"
+
+Environment:
+  CLAW_ROOT           Override vault location
+  WHISPER_MODEL       Whisper model (tiny/base/small/medium/large)
+  OPENCLAW_PORT       OpenClaw gateway port (default: 3000)
+EOF
+}
+
+cmd_status() {
+    echo "=== Claw Notes Status ==="
+    echo ""
+    echo "Environment: $CLAW_ENV"
+    echo "Vault: $CLAW_ROOT"
+    echo ""
+
+    echo "Directories:"
+    for dir in "$VAULT_PAGES" "$VAULT_JOURNALS" "$VAULT_TRANSCRIPTS_RAW"; do
+        if [ -d "$dir" ]; then
+            count=$(find "$dir" -type f -name "*.md" 2>/dev/null | wc -l)
+            echo "  $(basename "$dir"): $count files"
+        fi
+    done
+    echo ""
+
+    echo "Services:"
+    if openclaw_running; then
+        log_ok "OpenClaw: running"
+    else
+        log_warn "OpenClaw: stopped"
+    fi
+
+    if command -v whisper &> /dev/null; then
+        log_ok "Whisper: installed"
+    else
+        log_warn "Whisper: not installed"
+    fi
+    echo ""
+
+    echo "Git:"
+    if [ -d "$CLAW_ROOT/.git" ]; then
+        cd "$CLAW_ROOT"
+        branch=$(git branch --show-current 2>/dev/null || echo "unknown")
+        status=$(git status --porcelain 2>/dev/null | wc -l)
+        echo "  Branch: $branch"
+        echo "  Uncommitted changes: $status"
+    else
+        log_warn "Not a git repository"
+    fi
+}
+
+cmd_start() {
+    if openclaw_running; then
+        log_warn "OpenClaw already running"
+        return 0
+    fi
+
+    log_info "Starting OpenClaw gateway..."
+
+    if is_termux; then
+        termux-wake-lock 2>/dev/null || true
+    fi
+
+    HIJACK="$CLAW_LIB/hijack.js"
+    if [ -f "$HIJACK" ]; then
+        node -r "$HIJACK" "$(which openclaw)" gateway &
+    else
+        openclaw gateway &
+    fi
+
+    sleep 2
+    if openclaw_running; then
+        log_ok "OpenClaw started on $OPENCLAW_HOST:$OPENCLAW_PORT"
+    else
+        log_error "Failed to start OpenClaw"
+        return 1
+    fi
+}
+
+cmd_stop() {
+    if ! openclaw_running; then
+        log_warn "OpenClaw not running"
+        return 0
+    fi
+
+    log_info "Stopping OpenClaw..."
+    pkill -f "openclaw" 2>/dev/null || true
+
+    if is_termux; then
+        termux-wake-unlock 2>/dev/null || true
+    fi
+
+    log_ok "OpenClaw stopped"
+}
+
+cmd_sync() {
+    cd "$CLAW_ROOT"
+
+    msg="${1:-Auto-sync $(date '+%Y-%m-%d %H:%M')}"
+
+    if [ -z "$(git status --porcelain)" ]; then
+        log_info "Nothing to sync"
+        return 0
+    fi
+
+    log_info "Syncing changes..."
+    git add -A
+    git commit -m "$msg"
+
+    if git remote -v | grep -q origin; then
+        git push origin HEAD 2>/dev/null && log_ok "Pushed to remote" || log_warn "Push failed (offline?)"
+    fi
+
+    log_ok "Synced: $msg"
+}
+
+# Dispatch
+case "${1:-help}" in
+    record)
+        shift
+        "$CLAW_BIN/claw-record" "$@"
+        ;;
+    note)
+        shift
+        "$CLAW_BIN/claw-note" "$@"
+        ;;
+    transcribe)
+        shift
+        "$CLAW_BIN/claw-transcribe" "$@"
+        ;;
+    process)
+        shift
+        "$CLAW_BIN/claw-process" "$@"
+        ;;
+    full)
+        shift
+        "$CLAW_BIN/claw-full" "$@"
+        ;;
+    journal)
+        shift
+        "$CLAW_BIN/claw-journal" "$@"
+        ;;
+    sync)
+        shift
+        cmd_sync "$@"
+        ;;
+    start)
+        cmd_start
+        ;;
+    stop)
+        cmd_stop
+        ;;
+    status)
+        cmd_status
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        log_error "Unknown command: $1"
+        echo "Run 'claw help' for usage"
+        exit 1
+        ;;
+esac

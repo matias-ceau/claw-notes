@@ -1,111 +1,113 @@
-# CLAUDE.md - AI Assistant Context
+# CLAUDE.md
 
-This file provides context for AI assistants working on this codebase.
+Context for AI assistants working on this codebase.
 
-## Project Overview
+## What This Is
 
-Claw Notes is a voice-to-markdown notes system for Android Termux using OpenClaw AI. It captures voice notes, transcribes them, and saves as markdown compatible with Logseq and Obsidian.
+Claw Notes is a voice-to-markdown system for Android Termux. The repo IS the vault - notes and tooling live together.
 
-## Key Technical Constraints
-
-### Android Termux Environment
-
-- **No root access assumed**: All code must work on non-rooted Android
-- **System Error 13**: Android blocks `os.networkInterfaces()` - use the hijack.js shim:
-  ```javascript
-  const os = require('os');
-  os.networkInterfaces = () => ({});
-  ```
-- **Network binding**: Always use `127.0.0.1`, never `0.0.0.0`
-- **Wake locks**: Long-running processes need `termux-wake-lock`
-
-### Required Apps (from F-Droid, NOT Google Play)
-
-- Termux
-- Termux:API
-- Termux:Boot (for persistence)
-
-### Storage Access
-
-- Uses SAF (Scoped Access Framework) via `termux-setup-storage`
-- Notes stored at `~/storage/shared/Documents/claw-notes`
-- Git sync for version control
-
-## Architecture Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| Native Termux (not proot-distro) | Avoids filesystem overhead, PATH complexity, and awkward API escaping |
-| Termux:API as foundation | Provides native Android primitives; Tasker is just a bridge |
-| 127.0.0.1 loopback only | Non-rooted Android crashes with 0.0.0.0 gateway binding |
-| hijack.js shim | Required workaround for Android kernel blocking os.networkInterfaces() |
-
-## Three Implementation Approaches
-
-See `dev/` for conversation history. Summary:
-
-1. **Approach 1** (`threads-export-*14.140Z.json`): Boot persistence + watchdog
-2. **Approach 2** (`threads-export-*21.343Z.json`): Whisper + LLM processing (most features)
-3. **Approach 3** (`threads-export-*26.601Z.json`): Compact SAF (simplest, recommended start)
-
-**Recommendation**: Start with Approach 3, upgrade to 1 for reliability, then 2 for power features.
-
-## Directory Structure
+## Architecture
 
 ```
 claw-notes/
-├── README.md           # User documentation
-├── CLAUDE.md           # This file - AI context
-├── setup.sh            # Quick setup script
-├── dev/                # Development conversations/history
-│   └── threads-*.json  # Conversation exports
-├── scripts/            # Helper scripts
-│   ├── hijack.js       # Android compatibility shim
-│   └── watchdog.sh     # Process monitor
-└── docs/               # Extended documentation
-    └── COMPARISON.md   # Detailed approach comparison
+├── pages/journals/transcripts/summaries/assets/  ← Actual notes (vault)
+├── templates/                                     ← Note templates
+└── .claw/                                         ← CLI tooling
+    ├── bin/        claw, claw-record, claw-transcribe, claw-process, etc.
+    ├── lib/        config.sh, hijack.js
+    ├── boot/       watchdog.sh, start-claw.sh
+    └── config/     (future: user config)
 ```
 
-## Common Commands
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `.claw/bin/claw` | Main entry point, dispatches to subcommands |
+| `.claw/bin/claw-full` | Full pipeline: record → transcribe → process |
+| `.claw/bin/claw-process` | Calls OpenClaw LLM for transcript cleanup |
+| `.claw/lib/config.sh` | Shared configuration, paths, helpers |
+| `.claw/lib/hijack.js` | Android compatibility shim for Node.js |
+| `.claw/boot/watchdog.sh` | Auto-restart daemon |
+
+## Pipeline
+
+```
+claw full meeting
+    ↓
+claw-record     → assets/meeting_*.m4a
+    ↓
+claw-transcribe → transcripts/raw/meeting_transcript.md
+    ↓
+claw-process    → transcripts/cleaned/meeting_cleaned.md
+                → summaries/meeting_summary.md
+```
+
+## Android Constraints
+
+### System Error 13
+Android blocks `os.networkInterfaces()`. Solution: `hijack.js` shim that mocks it.
+
+```javascript
+const os = require('os');
+os.networkInterfaces = () => ({});
+```
+
+### Network Binding
+Use `127.0.0.1`, never `0.0.0.0`. Non-rooted Android crashes on wildcard binding.
+
+### Wake Locks
+Android kills background processes. Use `termux-wake-lock` for long operations.
+
+### Storage
+Uses SAF via `termux-setup-storage`. Vault lives at `~/storage/shared/Documents/claw-notes`.
+
+## LLM Integration
+
+`claw-process` calls OpenClaw's OpenAI-compatible API:
 
 ```bash
-# Start OpenClaw (with Android shim)
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway
-
-# Record audio
-termux-microphone-record -f audio.m4a
-
-# Wake lock (prevent Android killing process)
-termux-wake-lock
-
-# Check if OpenClaw running
-pgrep -f "openclaw"
+curl http://127.0.0.1:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"default","messages":[...]}'
 ```
 
-## Development Guidelines
-
-1. **Test on actual Android device** - Termux behavior differs from Linux
-2. **Always include hijack.js shim** - Required for Node.js on Android
-3. **Use 127.0.0.1** - Never 0.0.0.0 for gateway binding
-4. **Handle storage permissions** - SAF requires explicit user grant
-5. **Consider battery** - Use wake locks sparingly, implement proper cleanup
+Two prompts:
+1. **Cleanup**: Fix filler words, false starts, make coherent
+2. **Summary**: Extract key points, action items, suggest tags
 
 ## Markdown Format
 
-Output notes should be compatible with both Logseq and Obsidian:
+All notes use YAML frontmatter + wikilinks for Logseq/Obsidian compatibility:
 
-- Use `[[wikilinks]]` for internal links
-- Use `#tags` for tagging
-- YAML frontmatter for metadata
-- Standard markdown for formatting
+```markdown
+---
+type: transcript|note|journal|summary
+created: ISO-8601
+tags: []
+---
 
-## Error Handling
+# Title
 
-Common issues and solutions:
+Content with [[wikilinks]] and #tags
+```
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| System Error 13 | os.networkInterfaces blocked | Use hijack.js shim |
-| EADDRINUSE | Port already bound | Check for existing process, use different port |
-| Storage permission denied | SAF not configured | Run `termux-setup-storage` |
-| Process killed | Android battery optimization | Use `termux-wake-lock`, disable battery optimization |
+## Common Tasks
+
+### Add a new subcommand
+1. Create `.claw/bin/claw-newcmd`
+2. Source `../lib/config.sh` for shared config
+3. Add dispatch case in `.claw/bin/claw`
+
+### Change Whisper model
+Edit `WHISPER_MODEL` in `.claw/lib/config.sh` (tiny/base/small/medium/large)
+
+### Change LLM prompts
+Edit the prompt strings in `.claw/bin/claw-process`
+
+## Testing
+
+Test on actual Android hardware. Termux behavior differs from Linux:
+- Storage permissions require SAF
+- Network binding restrictions
+- Process lifecycle management

@@ -1,0 +1,62 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - Voice Recording
+#
+# Usage: claw-record [name]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+ensure_dirs
+
+NAME="${1:-recording}"
+TIMESTAMP=$(timestamp)
+FILENAME="${NAME}_${TIMESTAMP}.${RECORD_FORMAT}"
+FILEPATH="$VAULT_ASSETS/$FILENAME"
+
+# Check for termux-api
+if is_termux; then
+    if ! command -v termux-microphone-record &> /dev/null; then
+        log_error "termux-api not installed. Run: pkg install termux-api"
+        exit 1
+    fi
+fi
+
+log_info "Recording: $FILENAME"
+log_info "Press Ctrl+C to stop (or wait ${RECORD_LIMIT}s timeout)"
+echo ""
+
+# Record
+if is_termux; then
+    # Start recording
+    termux-microphone-record -f "$FILEPATH" -l "$RECORD_LIMIT" &
+    RECORD_PID=$!
+
+    # Handle Ctrl+C gracefully
+    trap 'termux-microphone-record -q; wait $RECORD_PID 2>/dev/null; echo ""; log_ok "Recording stopped"' INT
+
+    # Wait for recording to finish or be interrupted
+    wait $RECORD_PID 2>/dev/null || true
+    trap - INT
+else
+    # Linux fallback using arecord or ffmpeg
+    if command -v arecord &> /dev/null; then
+        timeout "$RECORD_LIMIT" arecord -f cd -t wav "$FILEPATH" || true
+    elif command -v ffmpeg &> /dev/null; then
+        timeout "$RECORD_LIMIT" ffmpeg -f alsa -i default -t "$RECORD_LIMIT" "$FILEPATH" 2>/dev/null || true
+    else
+        log_error "No recording tool available (need arecord or ffmpeg)"
+        exit 1
+    fi
+fi
+
+echo ""
+if [ -f "$FILEPATH" ]; then
+    SIZE=$(du -h "$FILEPATH" | cut -f1)
+    log_ok "Saved: $FILEPATH ($SIZE)"
+    echo "$FILEPATH"
+else
+    log_error "Recording failed"
+    exit 1
+fi
