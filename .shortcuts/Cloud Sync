@@ -1,0 +1,90 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Cloud Sync
+# Sync vault to/from cloud storage using rclone
+
+# Load user config to find CLAW_ROOT
+[ -f "$HOME/.config/claw-notes/config" ] && source "$HOME/.config/claw-notes/config"
+CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+# Check if cloud sync is configured
+if [ ! -f "$HOME/.config/claw-notes/sync-config" ]; then
+    termux-dialog text \
+        -t "Cloud Sync Setup Required" \
+        -i "Cloud sync not configured yet. Please open Termux and run:
+
+pkg install rclone
+claw-sync setup
+
+Or use the Status widget to launch Termux."
+    exit 0
+fi
+
+# Load sync config
+source "$HOME/.config/claw-notes/sync-config"
+
+# Create secure log directory
+LOG_DIR="$HOME/.cache/claw-notes"
+mkdir -p "$LOG_DIR"
+chmod 700 "$LOG_DIR"
+SYNC_LOG="$LOG_DIR/sync.log"
+
+# Show sync options menu
+RESPONSE=$(termux-dialog radio \
+    -t "Cloud Sync" \
+    -v "Sync (bidirectional),Push (upload only),Pull (download only),Status" \
+    | jq -r '.text')
+
+case "$RESPONSE" in
+    "Sync (bidirectional)")
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Syncing..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" sync 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Vault synced with cloud"
+            termux-vibrate -d 100
+        else
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Sync Failed" -i "$ERROR"
+        fi
+        ;;
+        
+    "Push (upload only)")
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Uploading..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" push 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Uploaded to cloud"
+            termux-vibrate -d 100
+        else
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Upload Failed" -i "$ERROR"
+        fi
+        ;;
+        
+    "Pull (download only)")
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Downloading..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" pull 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Downloaded from cloud"
+            termux-vibrate -d 100
+        else
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Download Failed" -i "$ERROR"
+        fi
+        ;;
+        
+    "Status")
+        STATUS=$("$CLAW_BIN/claw-sync" status 2>&1)
+        termux-dialog text -t "Cloud Sync Status" -i "$STATUS"
+        ;;
+        
+    *)
+        # User cancelled
+        exit 0
+        ;;
+esac
