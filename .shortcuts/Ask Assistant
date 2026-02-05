@@ -1,0 +1,71 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Ask Assistant
+# Quick question to OpenClaw, response via notification
+
+CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+# Check if OpenClaw running
+if ! openclaw_running; then
+    termux-toast "Starting assistant..."
+    "$CLAW_BIN/claw" start 2>/dev/null
+    sleep 3
+fi
+
+# Get question
+RESULT=$(termux-dialog text \
+    -t "Ask Assistant" \
+    -i "What do you need?")
+
+QUESTION=$(echo "$RESULT" | jq -r '.text // empty')
+CODE=$(echo "$RESULT" | jq -r '.code // -1')
+
+if [ "$CODE" != "0" ] || [ -z "$QUESTION" ]; then
+    exit 0
+fi
+
+termux-notification --id claw-ask --title "Thinking..." --content "$QUESTION" --ongoing
+
+# Call OpenClaw API
+RESPONSE=$(curl -s "http://$OPENCLAW_HOST:$OPENCLAW_PORT/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg q "$QUESTION" '{
+        model: "default",
+        messages: [{role: "user", content: $q}],
+        max_tokens: 500
+    }')" 2>/dev/null)
+
+ANSWER=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+termux-notification-remove claw-ask
+
+if [ -n "$ANSWER" ]; then
+    # Show response (truncated for notification)
+    SHORT=$(echo "$ANSWER" | head -c 200)
+    [ ${#ANSWER} -gt 200 ] && SHORT="${SHORT}..."
+
+    termux-notification \
+        --title "Assistant" \
+        --content "$SHORT" \
+        --button1 "Copy" \
+        --button1-action "echo '$ANSWER' | termux-clipboard-set && termux-toast 'Copied'"
+
+    # Also save to pages if substantial
+    if [ ${#ANSWER} -gt 100 ]; then
+        FILENAME="assistant-$(timestamp)"
+        cat > "$VAULT_PAGES/${FILENAME}.md" << EOF
+---
+type: note
+created: $(date -Iseconds)
+source: assistant
+tags: [assistant-response]
+---
+
+# Q: $QUESTION
+
+$ANSWER
+EOF
+    fi
+else
+    termux-toast "No response - check if assistant is running"
+fi

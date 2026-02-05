@@ -1,0 +1,57 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - Quick Note
+#
+# Usage: claw-note <title> [content]
+#        claw-note "Meeting Notes"
+#        claw-note "Ideas" "Some quick thoughts about the project"
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+ensure_dirs
+
+if [ -z "$1" ]; then
+    log_error "Usage: claw-note <title> [content]"
+    exit 1
+fi
+
+TITLE="$1"
+shift
+CONTENT="$*"
+
+# Sanitize filename
+FILENAME=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]-')
+FILEPATH="$VAULT_PAGES/${FILENAME}.md"
+
+# Check if exists
+if [ -f "$FILEPATH" ]; then
+    log_warn "Note exists: $FILEPATH"
+
+    if [ -n "$CONTENT" ]; then
+        echo "" >> "$FILEPATH"
+        echo "---" >> "$FILEPATH"
+        echo "" >> "$FILEPATH"
+        echo "## $(date '+%Y-%m-%d %H:%M')" >> "$FILEPATH"
+        echo "" >> "$FILEPATH"
+        echo "$CONTENT" >> "$FILEPATH"
+        log_ok "Appended to existing note"
+    fi
+else
+    cat > "$FILEPATH" << EOF
+---
+type: note
+title: $TITLE
+created: $(date -Iseconds)
+tags: []
+---
+
+# $TITLE
+
+$CONTENT
+EOF
+    log_ok "Created: $FILEPATH"
+fi
+
+echo "$FILEPATH"

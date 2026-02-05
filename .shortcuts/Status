@@ -1,0 +1,33 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Status
+# Show system status via notification
+
+CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+# Gather status
+if openclaw_running; then
+    ASSISTANT="Running"
+else
+    ASSISTANT="Stopped"
+fi
+
+NOTES=$(find "$VAULT_PAGES" -name "*.md" 2>/dev/null | wc -l)
+JOURNALS=$(find "$VAULT_JOURNALS" -name "*.md" 2>/dev/null | wc -l)
+TRANSCRIPTS=$(find "$VAULT_TRANSCRIPTS_RAW" -name "*.md" 2>/dev/null | wc -l)
+
+cd "$CLAW_ROOT"
+UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l)
+
+# Build status message
+STATUS="Assistant: $ASSISTANT
+Notes: $NOTES | Journals: $JOURNALS | Transcripts: $TRANSCRIPTS
+Uncommitted: $UNCOMMITTED files"
+
+termux-notification \
+    --title "Claw Notes" \
+    --content "$STATUS" \
+    --button1 "Sync" \
+    --button1-action "$CLAW_ROOT/.shortcuts/Sync" \
+    --button2 "Start" \
+    --button2-action "$CLAW_BIN/claw start"

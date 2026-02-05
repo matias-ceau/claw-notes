@@ -1,0 +1,87 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - Whisper Transcription
+#
+# Usage: claw-transcribe <audio-file>
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+ensure_dirs
+
+if [ -z "$1" ]; then
+    log_error "Usage: claw-transcribe <audio-file>"
+    exit 1
+fi
+
+AUDIO_FILE="$1"
+
+if [ ! -f "$AUDIO_FILE" ]; then
+    # Try assets folder
+    if [ -f "$VAULT_ASSETS/$AUDIO_FILE" ]; then
+        AUDIO_FILE="$VAULT_ASSETS/$AUDIO_FILE"
+    else
+        log_error "File not found: $AUDIO_FILE"
+        exit 1
+    fi
+fi
+
+# Check whisper
+if ! command -v whisper &> /dev/null; then
+    log_error "Whisper not installed. Run: pip install openai-whisper"
+    exit 1
+fi
+
+BASENAME=$(basename "$AUDIO_FILE" | sed 's/\.[^.]*$//')
+TIMESTAMP=$(timestamp)
+OUTPUT_FILE="$VAULT_TRANSCRIPTS_RAW/${BASENAME}_transcript.md"
+
+log_info "Transcribing: $(basename "$AUDIO_FILE")"
+log_info "Model: $WHISPER_MODEL"
+log_info "Language: $WHISPER_LANGUAGE"
+echo ""
+
+# Create temp dir for whisper output
+TEMP_DIR=$(mktemp -d)
+trap "rm -rf $TEMP_DIR" EXIT
+
+# Run Whisper
+whisper "$AUDIO_FILE" \
+    --model "$WHISPER_MODEL" \
+    --language "$WHISPER_LANGUAGE" \
+    --output_format txt \
+    --output_dir "$TEMP_DIR" \
+    2>&1 | grep -v "^$" || true
+
+# Get the transcript text
+TRANSCRIPT_TEXT=""
+for f in "$TEMP_DIR"/*.txt; do
+    if [ -f "$f" ]; then
+        TRANSCRIPT_TEXT=$(cat "$f")
+        break
+    fi
+done
+
+if [ -z "$TRANSCRIPT_TEXT" ]; then
+    log_error "Transcription failed - no output"
+    exit 1
+fi
+
+# Create markdown file with frontmatter
+cat > "$OUTPUT_FILE" << EOF
+---
+type: transcript
+source: $(basename "$AUDIO_FILE")
+created: $(date -Iseconds)
+model: $WHISPER_MODEL
+status: raw
+---
+
+# Transcript: $BASENAME
+
+$TRANSCRIPT_TEXT
+EOF
+
+log_ok "Saved: $OUTPUT_FILE"
+echo "$OUTPUT_FILE"

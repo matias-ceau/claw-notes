@@ -1,111 +1,35 @@
-# CLAUDE.md - AI Assistant Context
+# CLAUDE.md
 
-This file provides context for AI assistants working on this codebase.
+> **See [AGENT.md](AGENT.md) for complete AI assistant context.**
+> This file exists for Claude Code compatibility. The canonical source is AGENT.md.
 
-## Project Overview
+## Quick Reference
 
-Claw Notes is a voice-to-markdown notes system for Android Termux using OpenClaw AI. It captures voice notes, transcribes them, and saves as markdown compatible with Logseq and Obsidian.
+Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenClaw runs 24/7, integrates with WhatsApp, and uses this vault as its memory.
 
-## Key Technical Constraints
+**Key principle**: Users never touch the terminal. Interfaces are widgets, notifications, and chat.
 
-### Android Termux Environment
+## Critical Files
 
-- **No root access assumed**: All code must work on non-rooted Android
-- **System Error 13**: Android blocks `os.networkInterfaces()` - use the hijack.js shim:
-  ```javascript
-  const os = require('os');
-  os.networkInterfaces = () => ({});
-  ```
-- **Network binding**: Always use `127.0.0.1`, never `0.0.0.0`
-- **Wake locks**: Long-running processes need `termux-wake-lock`
+| File | Purpose |
+|------|---------|
+| `AGENT.md` | Full AI context (read this first) |
+| `.shortcuts/*` | Termux:Widget home screen actions |
+| `.claw/boot/watchdog.sh` | Keeps OpenClaw alive |
+| `.claw/lib/config.sh` | Shared configuration |
+| `.claw/lib/hijack.js` | Android Node.js compatibility |
 
-### Required Apps (from F-Droid, NOT Google Play)
+## Android Constraints (quick ref)
 
-- Termux
-- Termux:API
-- Termux:Boot (for persistence)
+- **System Error 13**: Use `hijack.js` shim for Node.js
+- **Network**: `127.0.0.1` only, never `0.0.0.0`
+- **Background**: Watchdog + wake locks
+- **Storage**: SAF via `termux-setup-storage`
 
-### Storage Access
+## Adding Features
 
-- Uses SAF (Scoped Access Framework) via `termux-setup-storage`
-- Notes stored at `~/storage/shared/Documents/claw-notes`
-- Git sync for version control
+1. **New widget**: Create in `.shortcuts/`, use `termux-dialog`/`termux-notification`
+2. **New hook**: Create in `.claw/hooks/`, wire to OpenClaw
+3. **New command**: Create in `.claw/bin/`, wire to widget
 
-## Architecture Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| Native Termux (not proot-distro) | Avoids filesystem overhead, PATH complexity, and awkward API escaping |
-| Termux:API as foundation | Provides native Android primitives; Tasker is just a bridge |
-| 127.0.0.1 loopback only | Non-rooted Android crashes with 0.0.0.0 gateway binding |
-| hijack.js shim | Required workaround for Android kernel blocking os.networkInterfaces() |
-
-## Three Implementation Approaches
-
-See `dev/` for conversation history. Summary:
-
-1. **Approach 1** (`threads-export-*14.140Z.json`): Boot persistence + watchdog
-2. **Approach 2** (`threads-export-*21.343Z.json`): Whisper + LLM processing (most features)
-3. **Approach 3** (`threads-export-*26.601Z.json`): Compact SAF (simplest, recommended start)
-
-**Recommendation**: Start with Approach 3, upgrade to 1 for reliability, then 2 for power features.
-
-## Directory Structure
-
-```
-claw-notes/
-├── README.md           # User documentation
-├── CLAUDE.md           # This file - AI context
-├── setup.sh            # Quick setup script
-├── dev/                # Development conversations/history
-│   └── threads-*.json  # Conversation exports
-├── scripts/            # Helper scripts
-│   ├── hijack.js       # Android compatibility shim
-│   └── watchdog.sh     # Process monitor
-└── docs/               # Extended documentation
-    └── COMPARISON.md   # Detailed approach comparison
-```
-
-## Common Commands
-
-```bash
-# Start OpenClaw (with Android shim)
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway
-
-# Record audio
-termux-microphone-record -f audio.m4a
-
-# Wake lock (prevent Android killing process)
-termux-wake-lock
-
-# Check if OpenClaw running
-pgrep -f "openclaw"
-```
-
-## Development Guidelines
-
-1. **Test on actual Android device** - Termux behavior differs from Linux
-2. **Always include hijack.js shim** - Required for Node.js on Android
-3. **Use 127.0.0.1** - Never 0.0.0.0 for gateway binding
-4. **Handle storage permissions** - SAF requires explicit user grant
-5. **Consider battery** - Use wake locks sparingly, implement proper cleanup
-
-## Markdown Format
-
-Output notes should be compatible with both Logseq and Obsidian:
-
-- Use `[[wikilinks]]` for internal links
-- Use `#tags` for tagging
-- YAML frontmatter for metadata
-- Standard markdown for formatting
-
-## Error Handling
-
-Common issues and solutions:
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| System Error 13 | os.networkInterfaces blocked | Use hijack.js shim |
-| EADDRINUSE | Port already bound | Check for existing process, use different port |
-| Storage permission denied | SAF not configured | Run `termux-setup-storage` |
-| Process killed | Android battery optimization | Use `termux-wake-lock`, disable battery optimization |
+See AGENT.md for detailed instructions.

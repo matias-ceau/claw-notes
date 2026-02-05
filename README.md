@@ -1,169 +1,101 @@
 # Claw Notes
 
-Voice-to-markdown notes system for Android using OpenClaw, Termux, and AI-powered transcription.
+Always-on AI assistant for Android. Voice notes, quick capture, WhatsApp integration.
 
-## Overview
+## How It Works
 
-Claw Notes captures voice notes on Android, transcribes them using AI, and saves them as markdown files compatible with [Logseq](https://logseq.com/) and [Obsidian](https://obsidian.md/). Notes are synced via Git for version control and backup.
+Your phone becomes a smart notes device:
+- **Tap widget** → Record voice → AI transcribes and cleans it up
+- **Message WhatsApp** → Assistant responds, saves to vault
+- **Notification actions** → Quick note, sync, ask questions
 
-## Approach Comparison
+No terminal needed. Everything via widgets and notifications.
 
-Three implementation approaches were explored during development:
-
-| Feature | Approach 1: Boot Persistence | Approach 2: Whisper + AI | Approach 3: Compact SAF |
-|---------|------------------------------|--------------------------|-------------------------|
-| **Complexity** | Moderate | High | Low |
-| **Auto-restart** | Yes (watchdog) | Yes | No |
-| **Transcription** | Basic | Whisper + LLM cleanup | Basic |
-| **Output** | Single markdown | Raw + Cleaned + Summary | Single markdown |
-| **Setup time** | ~15 min | ~30 min | ~10 min |
-| **Dependencies** | Node.js, Termux:API, Termux:Boot | + Python, FFmpeg, Whisper | Node.js, Termux:API |
-
-### Recommendation: Tiered Approach
-
-**Start with Approach 3** (Compact SAF) for quick deployment, then optionally upgrade:
-
-1. **Quick Start** - Approach 3: Minimal setup, get started immediately
-2. **Production** - Approach 1: Add boot persistence when you need reliability
-3. **Power User** - Approach 2: Add Whisper when you need transcript cleanup from ramblings
-
-## Quick Start (Approach 3 - Recommended)
-
-### Prerequisites
-
-- Android device with [Termux](https://f-droid.org/packages/com.termux/) from F-Droid
-- [Termux:API](https://f-droid.org/packages/com.termux.api/) from F-Droid
-
-### Installation
+## Setup
 
 ```bash
-# [1/7] Update packages
-pkg update && pkg upgrade -y
-
-# [2/7] Install dependencies
-pkg install -y nodejs-lts git termux-api
-
-# [3/7] Configure storage access
+# In Termux (from F-Droid, NOT Play Store)
 termux-setup-storage
-
-# [4/7] Install OpenClaw
-npm install -g openclaw
-
-# [5/7] Create Android compatibility shim
-mkdir -p ~/.openclaw
-cat > ~/.openclaw/hijack.js << 'EOF'
-const os = require('os');
-os.networkInterfaces = () => ({});
-EOF
-
-# [6/7] Configure OpenClaw
-openclaw config set gateway.host 127.0.0.1
-openclaw config set gateway.port 3000
-
-# [7/7] Start OpenClaw
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway
+cd ~/storage/shared/Documents
+git clone <this-repo> claw-notes
+cd claw-notes
+bash setup.sh
 ```
 
-### Setting Up Notes Directory
+Setup installs dependencies, creates home screen widgets, and starts the assistant.
 
-```bash
-# Create notes directory with SAF access
-mkdir -p ~/storage/shared/Documents/claw-notes
+## Home Screen Widgets
 
-# Initialize git repo
-cd ~/storage/shared/Documents/claw-notes
-git init
-```
+After setup, add Termux:Widget to your home screen:
 
-## Production Setup (Approach 1)
+| Widget | Action |
+|--------|--------|
+| **Record Voice** | One-tap recording → transcription → AI cleanup |
+| **Quick Note** | Dialog for quick text capture |
+| **Journal** | Add to today's journal |
+| **Ask Assistant** | Quick question → AI response via notification |
+| **Sync** | Git commit and push |
+| **Status** | Show system status |
 
-Add boot persistence to automatically restart on crashes:
+## WhatsApp Integration
 
-```bash
-# Install Termux:Boot from F-Droid
-pkg install termux-services
+OpenClaw connects to WhatsApp. Message your assistant to:
+- Ask questions
+- Send voice notes for transcription
+- Get reminders
+- Search your notes
 
-# Create boot script
-mkdir -p ~/.termux/boot
-cat > ~/.termux/boot/start-openclaw.sh << 'EOF'
-#!/data/data/com.termux/files/usr/bin/bash
-termux-wake-lock
+Configure in OpenClaw settings after setup.
 
-# Start OpenClaw
-node -r ~/.openclaw/hijack.js $(which openclaw) gateway &
-
-# Watchdog - restart if crashed
-while true; do
-  sleep 300
-  if ! pgrep -f "openclaw"; then
-    node -r ~/.openclaw/hijack.js $(which openclaw) gateway &
-  fi
-done &
-EOF
-
-chmod +x ~/.termux/boot/start-openclaw.sh
-```
-
-## Power User Setup (Approach 2)
-
-Add Whisper for intelligent transcript processing:
-
-```bash
-# Install additional dependencies
-pkg install -y python ffmpeg
-
-# Install Whisper
-pip install openai-whisper
-
-# Create vault structure
-mkdir -p ~/storage/shared/Documents/claw-notes/{pages,journals,transcripts/{raw,cleaned},assets}
-```
-
-### Vault Structure
+## What Gets Created
 
 ```
 claw-notes/
-├── pages/           # Topic-based notes
-├── journals/        # Daily notes
+├── pages/              # Your notes
+├── journals/           # Daily journal (YYYY-MM-DD.md)
 ├── transcripts/
-│   ├── raw/         # Unprocessed Whisper output
-│   └── cleaned/     # LLM-processed transcripts
-├── assets/          # Audio files, images
-└── summaries/       # AI-generated summaries
+│   ├── raw/            # Direct speech-to-text
+│   └── cleaned/        # AI-processed (coherent)
+├── summaries/          # AI summaries with action items
+└── assets/             # Audio files
 ```
 
-## Technical Notes
+## Requirements
 
-### Android Compatibility
+From F-Droid (not Play Store):
+- **Termux** - Linux environment
+- **Termux:API** - Android integration
+- **Termux:Widget** - Home screen shortcuts
+- **Termux:Boot** - Auto-start (optional)
 
-The `hijack.js` shim is required because Android blocks `os.networkInterfaces()` on non-rooted devices (System Error 13). The shim mocks this function.
+## Auto-Start on Boot
 
-### Network Binding
+Install Termux:Boot, then:
+```bash
+cp .claw/boot/start-claw.sh ~/.termux/boot/
+```
 
-Use `127.0.0.1` (loopback) instead of `0.0.0.0` to avoid crashes on non-rooted Android.
+The assistant starts automatically when your phone boots.
 
-### Wake Lock
+## Persistent Notification
 
-Use `termux-wake-lock` to prevent Android from killing the process during audio processing.
+When running, a notification stays in your tray with quick actions:
+- Tap **Record** to start voice capture
+- Tap **Note** for quick text entry
 
-## Workflow
+This also keeps Android from killing the background process.
 
-1. **Capture**: Record voice note using Termux:API microphone
-2. **Transcribe**: Process audio with Whisper (Approach 2) or basic recognition
-3. **Clean**: Optionally process with OpenClaw LLM for coherent output
-4. **Save**: Write markdown to notes directory
-5. **Sync**: Git commit and push
+## Offline Support
 
-## Compatibility
+- Voice recording: Always works
+- Transcription: Works offline (Whisper runs locally)
+- AI cleanup: Requires OpenClaw running
+- Sync: Requires network
 
-- **Note Apps**: Logseq, Obsidian, any markdown-based PKM
-- **Android**: 7.0+ (Termux requirement)
-- **Storage**: Uses Android SAF (Scoped Access Framework) for Documents folder access
+## For Developers
+
+See [AGENT.md](AGENT.md) for technical details and how to extend.
 
 ## License
 
 MIT
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

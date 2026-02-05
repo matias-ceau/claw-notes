@@ -1,0 +1,139 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Claw Notes - LLM Processing
+#
+# Takes a raw transcript and produces a cleaned version + summary
+#
+# Usage: claw-process <transcript-file>
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../lib/config.sh"
+
+ensure_dirs
+
+if [ -z "$1" ]; then
+    log_error "Usage: claw-process <transcript-file>"
+    exit 1
+fi
+
+INPUT_FILE="$1"
+
+if [ ! -f "$INPUT_FILE" ]; then
+    # Try transcripts/raw folder
+    if [ -f "$VAULT_TRANSCRIPTS_RAW/$INPUT_FILE" ]; then
+        INPUT_FILE="$VAULT_TRANSCRIPTS_RAW/$INPUT_FILE"
+    else
+        log_error "File not found: $INPUT_FILE"
+        exit 1
+    fi
+fi
+
+# Check if OpenClaw is running
+if ! openclaw_running; then
+    log_warn "OpenClaw not running. Starting..."
+    "$CLAW_BIN/claw" start
+    sleep 3
+fi
+
+BASENAME=$(basename "$INPUT_FILE" .md | sed 's/_transcript$//')
+CLEANED_FILE="$VAULT_TRANSCRIPTS_CLEAN/${BASENAME}_cleaned.md"
+SUMMARY_FILE="$VAULT_SUMMARIES/${BASENAME}_summary.md"
+
+# Extract just the transcript text (skip frontmatter)
+TRANSCRIPT=$(awk '/^---$/{p=!p;next} !p && NF' "$INPUT_FILE" | tail -n +2)
+
+if [ -z "$TRANSCRIPT" ]; then
+    log_error "Could not extract transcript text"
+    exit 1
+fi
+
+log_info "Processing: $(basename "$INPUT_FILE")"
+echo ""
+
+# --- CLEANED VERSION ---
+log_info "Generating cleaned transcript..."
+
+CLEAN_PROMPT="You are a transcript editor. Clean up this voice transcript to make it coherent and readable while preserving the speaker's meaning and intent. Fix filler words, false starts, and repetitions. Keep the same structure and all information. Do not add commentary, just output the cleaned transcript.
+
+TRANSCRIPT:
+$TRANSCRIPT"
+
+CLEANED_TEXT=$(curl -s "http://${OPENCLAW_HOST}:${OPENCLAW_PORT}/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg prompt "$CLEAN_PROMPT" '{
+        model: "default",
+        messages: [{role: "user", content: $prompt}],
+        temperature: 0.3
+    }')" | jq -r '.choices[0].message.content // empty')
+
+if [ -z "$CLEANED_TEXT" ]; then
+    log_error "Failed to get cleaned transcript from LLM"
+    exit 1
+fi
+
+cat > "$CLEANED_FILE" << EOF
+---
+type: transcript
+status: cleaned
+source: $(basename "$INPUT_FILE")
+created: $(date -Iseconds)
+---
+
+# Cleaned Transcript: $BASENAME
+
+$CLEANED_TEXT
+EOF
+
+log_ok "Cleaned: $CLEANED_FILE"
+
+# --- SUMMARY ---
+log_info "Generating summary..."
+
+SUMMARY_PROMPT="Summarize this transcript in a concise format. Include:
+1. A one-sentence overview
+2. Key points (bullet list)
+3. Any action items or decisions mentioned
+4. Relevant tags for categorization
+
+TRANSCRIPT:
+$CLEANED_TEXT"
+
+SUMMARY_TEXT=$(curl -s "http://${OPENCLAW_HOST}:${OPENCLAW_PORT}/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg prompt "$SUMMARY_PROMPT" '{
+        model: "default",
+        messages: [{role: "user", content: $prompt}],
+        temperature: 0.5
+    }')" | jq -r '.choices[0].message.content // empty')
+
+if [ -z "$SUMMARY_TEXT" ]; then
+    log_warn "Failed to generate summary"
+else
+    cat > "$SUMMARY_FILE" << EOF
+---
+type: summary
+source: $(basename "$CLEANED_FILE")
+created: $(date -Iseconds)
+---
+
+# Summary: $BASENAME
+
+$SUMMARY_TEXT
+
+---
+
+## Links
+- Raw transcript: [[transcripts/raw/${BASENAME}_transcript]]
+- Cleaned transcript: [[transcripts/cleaned/${BASENAME}_cleaned]]
+EOF
+
+    log_ok "Summary: $SUMMARY_FILE"
+fi
+
+echo ""
+log_ok "Processing complete!"
+echo ""
+echo "Files created:"
+echo "  - $CLEANED_FILE"
+echo "  - $SUMMARY_FILE"

@@ -1,0 +1,47 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Widget: Journal Entry
+# Quick add to today's journal
+
+CLAW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$CLAW_ROOT/.claw/lib/config.sh"
+
+ensure_dirs
+
+# Get entry via dialog
+RESULT=$(termux-dialog text \
+    -t "Journal - $(date '+%b %d')" \
+    -i "What happened?" \
+    -m)
+
+TEXT=$(echo "$RESULT" | jq -r '.text // empty')
+CODE=$(echo "$RESULT" | jq -r '.code // -1')
+
+if [ "$CODE" != "0" ] || [ -z "$TEXT" ]; then
+    exit 0
+fi
+
+JOURNAL="$VAULT_JOURNALS/$(today).md"
+
+if [ ! -f "$JOURNAL" ]; then
+    cat > "$JOURNAL" << EOF
+---
+type: journal
+date: $(today)
+created: $(date -Iseconds)
+---
+
+# $(date '+%Y-%m-%d')
+
+EOF
+fi
+
+# Append entry with timestamp
+cat >> "$JOURNAL" << EOF
+
+## $(date '+%H:%M')
+
+$TEXT
+EOF
+
+termux-toast "Journal updated"
+termux-vibrate -d 100
