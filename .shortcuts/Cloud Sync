@@ -1,99 +1,90 @@
 #!/data/data/com.termux/files/usr/bin/bash
-#
-# Claw Notes Widget: Cloud Sync
-#
-# Syncs vault to configured cloud storage (Google Drive, Mega, etc.)
-# Run 'claw-sync --setup' first to configure cloud provider.
+# Widget: Cloud Sync
+# Sync vault to/from cloud storage using rclone
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Try to find claw-notes root
-if [ -f "$HOME/.config/claw-notes/config" ]; then
-    source "$HOME/.config/claw-notes/config"
-fi
-
+# Load user config to find CLAW_ROOT
+[ -f "$HOME/.config/claw-notes/config" ] && source "$HOME/.config/claw-notes/config"
 CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+source "$CLAW_ROOT/.claw/lib/config.sh"
 
-# Source config
-if [ -f "$CLAW_ROOT/.claw/lib/config.sh" ]; then
-    source "$CLAW_ROOT/.claw/lib/config.sh"
+# Check if cloud sync is configured
+if [ ! -f "$HOME/.config/claw-notes/sync-config" ]; then
+    termux-dialog text \
+        -t "Cloud Sync Setup Required" \
+        -i "Cloud sync not configured yet. Please open Termux and run:
+
+pkg install rclone
+claw-sync setup
+
+Or use the Status widget to launch Termux."
+    exit 0
 fi
 
-# Check if rclone is configured
-if ! command -v rclone &> /dev/null; then
-    termux-toast "rclone not installed. Run setup.sh"
-    exit 1
-fi
+# Load sync config
+source "$HOME/.config/claw-notes/sync-config"
 
-RCLONE_REMOTE="${RCLONE_REMOTE:-claw-notes}"
+# Create secure log directory
+LOG_DIR="$HOME/.cache/claw-notes"
+mkdir -p "$LOG_DIR"
+chmod 700 "$LOG_DIR"
+SYNC_LOG="$LOG_DIR/sync.log"
 
-if ! rclone listremotes 2>/dev/null | grep -q "^${RCLONE_REMOTE}:"; then
-    termux-toast "Cloud not configured. Run: claw-sync --setup"
-    termux-notification \
-        --id "cloud-sync" \
-        --title "Cloud Sync Not Configured" \
-        --content "Run: claw-sync --setup"
-    exit 1
-fi
-
-# Show sync options
-choice=$(termux-dialog sheet \
+# Show sync options menu
+RESPONSE=$(termux-dialog radio \
     -t "Cloud Sync" \
-    -v "Sync (bidirectional),Push to cloud,Pull from cloud,Show status" \
-    2>/dev/null | jq -r '.text // empty')
+    -v "Sync (bidirectional),Push (upload only),Pull (download only),Status" \
+    | jq -r '.text')
 
-case "$choice" in
+case "$RESPONSE" in
     "Sync (bidirectional)")
-        termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Syncing..." --ongoing
-        termux-vibrate -d 100
-
-        if "$CLAW_ROOT/.claw/bin/claw-sync" 2>&1; then
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Sync complete"
-            termux-toast "Vault synced"
-        else
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Sync failed"
-            termux-toast "Sync failed"
-        fi
-        ;;
-    "Push to cloud")
-        termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Uploading..." --ongoing
-        termux-vibrate -d 100
-
-        if "$CLAW_ROOT/.claw/bin/claw-sync" --push 2>&1; then
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Upload complete"
-            termux-toast "Uploaded to cloud"
-        else
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Upload failed"
-        fi
-        ;;
-    "Pull from cloud")
-        # Confirm destructive action
-        confirm=$(termux-dialog confirm \
-            -t "Pull from Cloud" \
-            -i "This will overwrite local vault with cloud version. Continue?" \
-            2>/dev/null | jq -r '.text // empty')
-
-        if [ "$confirm" = "yes" ]; then
-            termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Downloading..." --ongoing
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Syncing..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" sync 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Vault synced with cloud"
             termux-vibrate -d 100
-
-            # Force pull without interactive prompt
-            RCLONE_PATH="${RCLONE_PATH:-ClawNotes-Vault}"
-            if rclone sync "$RCLONE_REMOTE:$RCLONE_PATH" "$VAULT_ROOT" --progress 2>&1; then
-                termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Download complete"
-                termux-toast "Vault restored from cloud"
-            else
-                termux-notification --id "cloud-sync" --title "Cloud Sync" --content "Download failed"
-            fi
         else
-            termux-toast "Cancelled"
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Sync Failed" -i "$ERROR"
         fi
         ;;
-    "Show status")
-        status=$("$CLAW_ROOT/.claw/bin/claw-sync" --status 2>&1)
-        termux-dialog text -t "Cloud Sync Status" -i "$status" 2>/dev/null
+        
+    "Push (upload only)")
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Uploading..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" push 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Uploaded to cloud"
+            termux-vibrate -d 100
+        else
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Upload Failed" -i "$ERROR"
+        fi
         ;;
+        
+    "Pull (download only)")
+        termux-notification --id claw-sync --title "Cloud Sync" --content "Downloading..." --ongoing
+        
+        if "$CLAW_BIN/claw-sync" pull 2>&1 | tee "$SYNC_LOG"; then
+            termux-notification-remove claw-sync
+            termux-toast "Downloaded from cloud"
+            termux-vibrate -d 100
+        else
+            termux-notification-remove claw-sync
+            ERROR=$(tail -5 "$SYNC_LOG")
+            termux-dialog text -t "Download Failed" -i "$ERROR"
+        fi
+        ;;
+        
+    "Status")
+        STATUS=$("$CLAW_BIN/claw-sync" status 2>&1)
+        termux-dialog text -t "Cloud Sync Status" -i "$STATUS"
+        ;;
+        
     *)
-        termux-toast "Cancelled"
+        # User cancelled
+        exit 0
         ;;
 esac

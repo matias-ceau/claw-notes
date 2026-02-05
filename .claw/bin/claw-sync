@@ -9,6 +9,7 @@
 #   claw-sync              # Sync vault to configured cloud
 #   claw-sync --setup      # Configure cloud storage
 #   claw-sync --status     # Show sync status
+#   claw-sync --push       # Push to cloud
 #   claw-sync --pull       # Pull from cloud (overwrite local)
 
 set -e
@@ -150,7 +151,9 @@ sync_push() {
     check_rclone
 
     echo "Pushing vault to cloud..."
-    notify_ongoing "Claw Sync" "Uploading to cloud..." "sync"
+    if is_termux; then
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Uploading to cloud..." --ongoing 2>/dev/null || true
+    fi
 
     rclone sync "$VAULT_ROOT" "$RCLONE_REMOTE:$RCLONE_PATH" \
         --progress \
@@ -159,8 +162,11 @@ sync_push() {
         --exclude "*.mp3" \
         --exclude "*.wav"
 
-    notify "Claw Sync" "Upload complete" "sync"
-    toast "Vault synced to cloud"
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Upload complete" 2>/dev/null || true
+        termux-toast "Vault synced to cloud" 2>/dev/null || true
+    fi
     echo "Done!"
 }
 
@@ -177,13 +183,18 @@ sync_pull() {
     fi
 
     echo "Pulling vault from cloud..."
-    notify_ongoing "Claw Sync" "Downloading from cloud..." "sync"
+    if is_termux; then
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Downloading from cloud..." --ongoing 2>/dev/null || true
+    fi
 
     rclone sync "$RCLONE_REMOTE:$RCLONE_PATH" "$VAULT_ROOT" \
         --progress
 
-    notify "Claw Sync" "Download complete" "sync"
-    toast "Vault restored from cloud"
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Download complete" 2>/dev/null || true
+        termux-toast "Vault restored from cloud" 2>/dev/null || true
+    fi
     echo "Done!"
 }
 
@@ -191,7 +202,9 @@ sync_bidirectional() {
     check_rclone
 
     echo "Syncing vault with cloud (bidirectional)..."
-    notify_ongoing "Claw Sync" "Syncing..." "sync"
+    if is_termux; then
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Syncing..." --ongoing 2>/dev/null || true
+    fi
 
     # Use bisync for bidirectional sync
     rclone bisync "$VAULT_ROOT" "$RCLONE_REMOTE:$RCLONE_PATH" \
@@ -208,8 +221,11 @@ sync_bidirectional() {
         --exclude "*.mp3" \
         --exclude "*.wav"
 
-    notify "Claw Sync" "Sync complete" "sync"
-    toast "Vault synced"
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Sync complete" 2>/dev/null || true
+        termux-toast "Vault synced" 2>/dev/null || true
+    fi
     echo "Done!"
 }
 
