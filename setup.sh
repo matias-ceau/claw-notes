@@ -96,20 +96,51 @@ fi
 echo "    Default: $DEFAULT_VAULT"
 read -p "    Press Enter to accept, or type custom path: " CUSTOM_VAULT
 
+# Validate custom vault path if provided
+if [ -n "$CUSTOM_VAULT" ]; then
+    # Require an absolute path to avoid ambiguity and unsafe locations
+    case "$CUSTOM_VAULT" in
+        /*) ;;
+        *)
+            warn "Custom vault path must be an absolute path. Using default: $DEFAULT_VAULT"
+            CUSTOM_VAULT=""
+            ;;
+    esac
+
+    # Allow only a conservative set of characters in the path
+    if [ -n "$CUSTOM_VAULT" ] && printf '%s' "$CUSTOM_VAULT" | grep -qE '[^A-Za-z0-9_./-]'; then
+        warn "Custom vault path contains unsupported characters. Using default: $DEFAULT_VAULT"
+        CUSTOM_VAULT=""
+    fi
+fi
+
 VAULT_ROOT="${CUSTOM_VAULT:-$DEFAULT_VAULT}"
 
 # Create vault directories
-mkdir -p "$VAULT_ROOT/pages" \
+if ! mkdir -p "$VAULT_ROOT/pages" \
          "$VAULT_ROOT/journals" \
          "$VAULT_ROOT/transcripts/raw" \
          "$VAULT_ROOT/transcripts/cleaned" \
          "$VAULT_ROOT/summaries" \
          "$VAULT_ROOT/assets" \
-         "$VAULT_ROOT/templates"
+         "$VAULT_ROOT/templates"; then
+    echo -e "${RED}Error:${NC} Failed to create vault directories at '$VAULT_ROOT'. Please check the path and your permissions."
+    exit 1
+fi
+
+# Ensure vault root is writable
+if [ ! -w "$VAULT_ROOT" ]; then
+    echo -e "${RED}Error:${NC} Vault path '$VAULT_ROOT' is not writable. Please choose a different location."
+    exit 1
+fi
 
 # Copy templates to vault if not exists
 if [ ! -f "$VAULT_ROOT/templates/note.md" ] && [ -d "$SCRIPT_DIR/templates" ]; then
-    cp -r "$SCRIPT_DIR/templates/"* "$VAULT_ROOT/templates/" 2>/dev/null || true
+    if ! cp -r "$SCRIPT_DIR/templates/"* "$VAULT_ROOT/templates/"; then
+        warn "Failed to copy default templates into '$VAULT_ROOT/templates'. You may need to copy them manually."
+    else
+        ok "Default templates copied to vault"
+    fi
 fi
 
 # Copy Syncthing ignore file to vault root (for cloud sync)
