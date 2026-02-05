@@ -411,29 +411,16 @@ if [ "$ENV" = "termux" ]; then
     echo ""
     echo "  4. Your notes are in: $VAULT_ROOT"
     echo ""
-    echo "Cloud sync options:"
+    echo "Cloud sync:"
+    echo "  Configure cloud sync with Google Drive, Dropbox, Mega, etc.:"
+    echo "    claw-sync --setup"
     echo ""
-    echo "  Option 1 - Built-in rclone sync (recommended):"
-    echo "    • Install: pkg install rclone"
-    echo "    • Setup: claw-sync setup"
-    echo "    • Use 'Cloud Sync' widget for one-tap sync"
-    echo "    • Supports: Google Drive, Dropbox, Mega, OneDrive, etc."
+    echo "  Then use the 'Cloud Sync' widget on your home screen"
     echo ""
-    echo "  Option 2 - Third-party apps:"
-    echo "    • Syncthing (F-Droid)"
-    echo "    • FolderSync, Dropsync"
-    echo "    • Google Drive, Dropbox app"
-    echo ""
-    
-    # Offer to setup cloud sync now
-    if command -v rclone &> /dev/null; then
-        echo ""
-        read -p "    Setup cloud sync now? [y/N] " -n 1 -r
-        echo ""
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            "$SCRIPT_DIR/.claw/bin/claw-sync" setup
-        fi
-    fi
+    echo "  Or sync manually with third-party apps:"
+    echo "    - Syncthing (recommended, F-Droid)"
+    echo "    - FolderSync, Dropsync"
+    echo "    - Google Drive, Dropbox app"
     echo ""
 
     if command -v termux-notification &> /dev/null; then

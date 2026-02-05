@@ -1,318 +1,256 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Claw Notes - Cloud Sync Tool
 #
-# Sync vault to cloud storage using rclone
-# Supports: Google Drive, Dropbox, Mega, OneDrive, and more
+# Claw Notes - Cloud Sync Helper
+#
+# Syncs the vault (user data) to cloud storage using rclone.
+# Supports: Google Drive, Mega, Dropbox, OneDrive, and more.
+#
+# Usage:
+#   claw-sync              # Sync vault to configured cloud
+#   claw-sync --setup      # Configure cloud storage
+#   claw-sync --status     # Show sync status
+#   claw-sync --push       # Push to cloud
+#   claw-sync --pull       # Pull from cloud (overwrite local)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../lib/config.sh"
 
-show_help() {
-    cat << 'EOF'
-claw-sync - Cloud synchronization for Claw Notes vault
+RCLONE_REMOTE="${RCLONE_REMOTE:-claw-notes}"
+RCLONE_PATH="${RCLONE_PATH:-ClawNotes-Vault}"
 
-Usage:
-  claw-sync [command] [options]
+usage() {
+    cat <<EOF
+Claw Notes - Cloud Sync
 
-Commands:
-  setup                   Configure cloud sync with rclone
-  push                    Upload vault to cloud (one-way)
-  pull                    Download from cloud to vault (one-way)
-  sync                    Bidirectional sync (merge changes)
-  status                  Show sync status
-  help                    Show this help
+Usage: claw-sync [OPTIONS]
 
-Examples:
-  claw-sync setup         # First-time setup with rclone
-  claw-sync sync          # Sync vault with cloud
-  claw-sync push          # Upload local changes only
-  claw-sync pull          # Download cloud changes only
+Options:
+  (none)      Sync vault to cloud (bidirectional)
+  --push      Push local changes to cloud
+  --pull      Pull from cloud (careful: overwrites local)
+  --setup     Configure cloud storage (interactive)
+  --status    Show sync configuration and status
+  --help      Show this help
 
-Requirements:
-  - rclone must be installed (pkg install rclone)
-  - Remote must be configured (claw-sync setup)
+Supported cloud providers (via rclone):
+  Google Drive, Mega, Dropbox, OneDrive, Box, pCloud, and more
+
 EOF
+}
+
+setup_rclone() {
+    echo ""
+    echo "=== Cloud Sync Setup ==="
+    echo ""
+
+    # Check if rclone is installed
+    if ! command -v rclone &> /dev/null; then
+        echo "Installing rclone..."
+        if [ "$CLAW_ENV" = "termux" ]; then
+            pkg install -y rclone
+        else
+            echo "Please install rclone: https://rclone.org/install/"
+            exit 1
+        fi
+    fi
+
+    echo "Rclone supports many cloud providers:"
+    echo "  1. Google Drive (recommended)"
+    echo "  2. Mega"
+    echo "  3. Dropbox"
+    echo "  4. OneDrive"
+    echo "  5. Other (manual setup)"
+    echo ""
+    read -p "Choose provider [1-5]: " choice
+
+    case "$choice" in
+        1)
+            echo ""
+            echo "Setting up Google Drive..."
+            echo "This will open a browser for authentication."
+            echo ""
+            rclone config create "$RCLONE_REMOTE" drive
+            ;;
+        2)
+            echo ""
+            echo "Setting up Mega..."
+            read -p "Mega email: " mega_user
+            read -sp "Mega password: " mega_pass
+            echo ""
+            rclone config create "$RCLONE_REMOTE" mega user "$mega_user" pass "$mega_pass"
+            ;;
+        3)
+            echo ""
+            echo "Setting up Dropbox..."
+            rclone config create "$RCLONE_REMOTE" dropbox
+            ;;
+        4)
+            echo ""
+            echo "Setting up OneDrive..."
+            rclone config create "$RCLONE_REMOTE" onedrive
+            ;;
+        5)
+            echo ""
+            echo "Running rclone config for manual setup..."
+            echo "Create a remote named '$RCLONE_REMOTE'"
+            rclone config
+            ;;
+        *)
+            echo "Invalid choice"
+            exit 1
+            ;;
+    esac
+
+    # Save config
+    mkdir -p "$HOME/.config/claw-notes"
+    echo "RCLONE_REMOTE=\"$RCLONE_REMOTE\"" >> "$HOME/.config/claw-notes/config"
+    echo "RCLONE_PATH=\"$RCLONE_PATH\"" >> "$HOME/.config/claw-notes/config"
+
+    echo ""
+    echo "Cloud sync configured!"
+    echo "Remote: $RCLONE_REMOTE:$RCLONE_PATH"
+    echo ""
+    echo "Run 'claw-sync --push' to upload your vault."
 }
 
 check_rclone() {
     if ! command -v rclone &> /dev/null; then
-        log_error "rclone not installed"
-        echo ""
-        echo "Install with:"
-        if is_termux; then
-            echo "  pkg install rclone"
-        else
-            echo "  apt install rclone  # or brew install rclone"
-        fi
-        echo ""
+        echo "rclone not installed. Run: claw-sync --setup"
+        exit 1
+    fi
+
+    if ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:"; then
+        echo "Remote '$RCLONE_REMOTE' not configured. Run: claw-sync --setup"
         exit 1
     fi
 }
 
-cmd_setup() {
-    check_rclone
-    
+sync_status() {
     echo ""
-    log_info "Cloud Sync Setup"
+    echo "=== Sync Status ==="
     echo ""
-    echo "This will configure rclone to sync your vault to cloud storage."
-    echo "Supported providers: Google Drive, Dropbox, Mega, OneDrive, etc."
+    echo "Vault location: $VAULT_ROOT"
     echo ""
-    
-    # Check if rclone config exists
-    if [ -f "$HOME/.config/rclone/rclone.conf" ] && [ -s "$HOME/.config/rclone/rclone.conf" ]; then
-        echo "Existing rclone remotes:"
-        rclone listremotes
+
+    if command -v rclone &> /dev/null; then
+        echo "Rclone: installed"
+        echo "Remotes configured:"
+        rclone listremotes | sed 's/^/  /'
         echo ""
-        read -p "Use existing remote? [Y/n] " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            read -p "Enter remote name (e.g., gdrive, dropbox): " REMOTE_NAME
-        else
-            log_info "Creating new remote..."
-            echo ""
-            rclone config
-            read -p "Enter the name of the remote you just created: " REMOTE_NAME
-        fi
+        echo "Active remote: $RCLONE_REMOTE:$RCLONE_PATH"
     else
-        log_info "No rclone config found. Let's create one..."
-        echo ""
-        rclone config
-        echo ""
-        read -p "Enter the name of the remote you just created: " REMOTE_NAME
+        echo "Rclone: not installed"
+        echo "Run 'claw-sync --setup' to configure cloud sync"
     fi
-    
-    # Verify remote exists
-    if ! rclone listremotes | grep -q "^${REMOTE_NAME}:$"; then
-        log_error "Remote '$REMOTE_NAME' not found"
-        exit 1
-    fi
-    
-    # Ask for remote path
     echo ""
-    read -p "Enter remote path (default: ClawNotes-Vault): " REMOTE_PATH
-    REMOTE_PATH="${REMOTE_PATH:-ClawNotes-Vault}"
-    
-    # Save config
-    mkdir -p "$HOME/.config/claw-notes"
-    cat > "$HOME/.config/claw-notes/sync-config" <<EOF
-# Claw Notes Cloud Sync Configuration
-SYNC_REMOTE="$REMOTE_NAME"
-SYNC_PATH="$REMOTE_PATH"
-EOF
-    
-    log_ok "Cloud sync configured"
-    echo ""
-    echo "Remote: $REMOTE_NAME:$REMOTE_PATH"
-    echo "Local:  $VAULT_ROOT"
-    echo ""
-    echo "Test with: claw-sync status"
 }
 
-load_sync_config() {
-    local config_file="$HOME/.config/claw-notes/sync-config"
-    
-    if [ ! -f "$config_file" ]; then
-        log_error "Cloud sync not configured"
-        echo ""
-        echo "Run: claw-sync setup"
-        echo ""
-        exit 1
-    fi
-    
-    source "$config_file"
-    
-    if [ -z "$SYNC_REMOTE" ] || [ -z "$SYNC_PATH" ]; then
-        log_error "Invalid sync configuration"
-        echo ""
-        echo "Run: claw-sync setup"
-        echo ""
-        exit 1
-    fi
-}
-
-cmd_status() {
+sync_push() {
     check_rclone
-    load_sync_config
-    
-    REMOTE_FULL="${SYNC_REMOTE}:${SYNC_PATH}"
-    
-    echo ""
-    log_info "Sync Status"
-    echo ""
-    echo "Local:  $VAULT_ROOT"
-    echo "Remote: $REMOTE_FULL"
-    echo ""
-    
-    # Check if remote path exists
-    if rclone lsd "$SYNC_REMOTE:" 2>/dev/null | grep -q "$SYNC_PATH"; then
-        log_ok "Remote path exists"
-        
-        # Get file counts
-        local_files=$(find "$VAULT_ROOT" -type f 2>/dev/null | wc -l)
-        remote_files=$(rclone ls "$REMOTE_FULL" 2>/dev/null | wc -l)
-        
-        echo ""
-        echo "Files:"
-        echo "  Local:  $local_files"
-        echo "  Remote: $remote_files"
-    else
-        log_warn "Remote path does not exist yet"
-        echo ""
-        echo "Run 'claw-sync push' to create it"
-    fi
-    echo ""
-}
 
-cmd_push() {
-    check_rclone
-    load_sync_config
-    
-    REMOTE_FULL="${SYNC_REMOTE}:${SYNC_PATH}"
-    
-    log_info "Pushing to cloud..."
-    echo ""
-    echo "Local → $REMOTE_FULL"
-    echo ""
-    
+    echo "Pushing vault to cloud..."
     if is_termux; then
-        notify_ongoing "Cloud Sync" "Uploading to cloud..." "claw-sync"
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Uploading to cloud..." --ongoing 2>/dev/null || true
     fi
-    
-    # Use rclone copy for one-way upload
-    if rclone copy "$VAULT_ROOT" "$REMOTE_FULL" \
+
+    rclone sync "$VAULT_ROOT" "$RCLONE_REMOTE:$RCLONE_PATH" \
         --progress \
         --exclude ".git/**" \
-        --exclude ".stignore" \
-        --exclude "*.tmp" \
-        --exclude ".DS_Store"; then
-        
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Uploaded to cloud"
-        fi
-        log_ok "Push complete"
-    else
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Upload failed"
-        fi
-        log_error "Push failed"
-        exit 1
+        --exclude "*.m4a" \
+        --exclude "*.mp3" \
+        --exclude "*.wav"
+
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Upload complete" 2>/dev/null || true
+        termux-toast "Vault synced to cloud" 2>/dev/null || true
     fi
+    echo "Done!"
 }
 
-cmd_pull() {
+sync_pull() {
     check_rclone
-    load_sync_config
-    
-    REMOTE_FULL="${SYNC_REMOTE}:${SYNC_PATH}"
-    
-    log_info "Pulling from cloud..."
+
+    echo "WARNING: This will overwrite local vault with cloud version!"
+    read -p "Continue? [y/N] " -n 1 -r
     echo ""
-    echo "$REMOTE_FULL → Local"
-    echo ""
-    
-    if is_termux; then
-        notify_ongoing "Cloud Sync" "Downloading from cloud..." "claw-sync"
+
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
     fi
-    
-    # Use rclone copy for one-way download
-    if rclone copy "$REMOTE_FULL" "$VAULT_ROOT" \
+
+    echo "Pulling vault from cloud..."
+    if is_termux; then
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Downloading from cloud..." --ongoing 2>/dev/null || true
+    fi
+
+    rclone sync "$RCLONE_REMOTE:$RCLONE_PATH" "$VAULT_ROOT" \
+        --progress
+
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Download complete" 2>/dev/null || true
+        termux-toast "Vault restored from cloud" 2>/dev/null || true
+    fi
+    echo "Done!"
+}
+
+sync_bidirectional() {
+    check_rclone
+
+    echo "Syncing vault with cloud (bidirectional)..."
+    if is_termux; then
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Syncing..." --ongoing 2>/dev/null || true
+    fi
+
+    # Use bisync for bidirectional sync
+    rclone bisync "$VAULT_ROOT" "$RCLONE_REMOTE:$RCLONE_PATH" \
         --progress \
         --exclude ".git/**" \
-        --exclude ".stignore" \
-        --exclude "*.tmp" \
-        --exclude ".DS_Store"; then
-        
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Downloaded from cloud"
-        fi
-        log_ok "Pull complete"
-    else
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Download failed"
-        fi
-        log_error "Pull failed"
-        exit 1
-    fi
-}
-
-cmd_sync() {
-    check_rclone
-    load_sync_config
-    
-    REMOTE_FULL="${SYNC_REMOTE}:${SYNC_PATH}"
-    
-    log_info "Syncing with cloud..."
-    echo ""
-    echo "Local ↔ $REMOTE_FULL"
-    echo ""
-    
-    if is_termux; then
-        notify_ongoing "Cloud Sync" "Syncing with cloud..." "claw-sync"
-    fi
-    
-    # Use rclone sync for bidirectional sync
-    # Note: This makes the remote match the local (one-way sync)
-    # For true bidirectional, we'd need rclone bisync (experimental)
-    if rclone bisync "$VAULT_ROOT" "$REMOTE_FULL" \
+        --exclude "*.m4a" \
+        --exclude "*.mp3" \
+        --exclude "*.wav" \
+        --resync 2>/dev/null || \
+    rclone bisync "$VAULT_ROOT" "$RCLONE_REMOTE:$RCLONE_PATH" \
         --progress \
         --exclude ".git/**" \
-        --exclude ".stignore" \
-        --exclude "*.tmp" \
-        --exclude ".DS_Store" \
-        --create-empty-src-dirs \
-        --compare size,modtime \
-        --slow-hash-sync-only \
-        --resilient; then
-        
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Synced with cloud"
-        fi
-        log_ok "Sync complete"
-    else
-        if is_termux; then
-            notify_clear "claw-sync"
-            toast "Sync failed"
-        fi
-        log_error "Sync failed"
-        echo ""
-        echo "Note: If this is your first sync, try 'claw-sync push' first"
-        echo ""
-        exit 1
+        --exclude "*.m4a" \
+        --exclude "*.mp3" \
+        --exclude "*.wav"
+
+    if is_termux; then
+        termux-notification-remove "claw-cloud-sync" 2>/dev/null || true
+        termux-notification --id "claw-cloud-sync" --title "Cloud Sync" --content "Sync complete" 2>/dev/null || true
+        termux-toast "Vault synced" 2>/dev/null || true
     fi
+    echo "Done!"
 }
 
-# Dispatch
-case "${1:-help}" in
-    setup)
-        cmd_setup
+case "${1:-}" in
+    --setup)
+        setup_rclone
         ;;
-    push)
-        cmd_push
+    --status)
+        sync_status
         ;;
-    pull)
-        cmd_pull
+    --push)
+        sync_push
         ;;
-    sync)
-        cmd_sync
+    --pull)
+        sync_pull
         ;;
-    status)
-        cmd_status
+    --help|-h)
+        usage
         ;;
-    help|--help|-h)
-        show_help
+    "")
+        sync_bidirectional
         ;;
     *)
-        log_error "Unknown command: $1"
-        echo ""
-        echo "Run 'claw-sync help' for usage"
+        echo "Unknown option: $1"
+        usage
         exit 1
         ;;
 esac

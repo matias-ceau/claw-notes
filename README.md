@@ -123,6 +123,22 @@ Transcription uses cloud APIs (local Whisper doesn't work on Termux):
 
 Setup will prompt for these keys.
 
+## Cloud Sync
+
+Sync your vault to cloud storage (Google Drive, Dropbox, Mega, OneDrive, etc.):
+
+```bash
+# Configure cloud sync (first time)
+claw-sync --setup
+
+# Then use the Cloud Sync widget, or run:
+claw cloud-sync
+```
+
+The Cloud Sync widget provides bidirectional sync, push-only, pull-only, and status options.
+
+Alternatively, use third-party sync apps like Syncthing, FolderSync, or the Google Drive app.
+
 ## Offline Limitations
 
 - Voice recording: Works offline (saves to assets/)
