@@ -30,7 +30,7 @@ After setup, add Termux:Widget to your home screen:
 
 | Widget | Action |
 |--------|--------|
-| **Record Voice** | One-tap recording → transcription → AI cleanup |
+| **Record Voice** | One-tap recording → sends to OpenClaw for transcription |
 | **Quick Note** | Dialog for quick text capture |
 | **Journal** | Add to today's journal |
 | **Ask Assistant** | Quick question → AI response via notification |
@@ -85,12 +85,20 @@ When running, a notification stays in your tray with quick actions:
 
 This also keeps Android from killing the background process.
 
-## Offline Support
+## API Keys Required
 
-- Voice recording: Always works
-- Transcription: Works offline (Whisper runs locally)
-- AI cleanup: Requires OpenClaw running
-- Sync: Requires network
+Transcription uses cloud APIs (local Whisper doesn't work on Termux):
+- **OpenAI API key** (recommended) - for Whisper transcription
+- **OpenRouter API key** (optional) - alternative provider
+
+Setup will prompt for these keys.
+
+## Offline Limitations
+
+- Voice recording: Works offline (saves to assets/)
+- Transcription: Requires internet (uses OpenAI Whisper API)
+- AI responses: Requires internet
+- Sync: Requires internet
 
 ## For Developers
 
