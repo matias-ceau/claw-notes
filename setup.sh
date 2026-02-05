@@ -38,7 +38,7 @@ else
     echo ""
 fi
 
-TOTAL=9
+TOTAL=10
 
 # Step 1: Update packages
 step 1 $TOTAL "Updating packages..."
@@ -375,8 +375,35 @@ else
     ok "Skipped (Termux only)"
 fi
 
-# Step 9: Start assistant
-step 9 $TOTAL "Starting assistant..."
+# Step 9: Cloud sync setup (optional)
+step 9 $TOTAL "Cloud sync setup (optional)..."
+echo ""
+echo "    Your vault can be synced to cloud storage:"
+echo "    Google Drive, Mega, Dropbox, OneDrive, etc."
+echo ""
+read -p "    Setup cloud sync now? [y/N] " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Install rclone if needed
+    if ! command -v rclone &> /dev/null; then
+        echo "    Installing rclone..."
+        if [ "$ENV" = "termux" ]; then
+            pkg install -y rclone > /dev/null 2>&1
+        fi
+    fi
+
+    if command -v rclone &> /dev/null; then
+        "$SCRIPT_DIR/.claw/bin/claw-sync" --setup
+    else
+        warn "Install rclone manually, then run: claw-sync --setup"
+    fi
+else
+    ok "Skipped - run 'claw-sync --setup' later"
+fi
+
+# Step 10: Start assistant
+step 10 $TOTAL "Starting assistant..."
 if command -v openclaw &> /dev/null && [ "$ENV" = "termux" ]; then
     "$SCRIPT_DIR/.claw/boot/watchdog.sh" --daemon 2>/dev/null
     sleep 2
