@@ -5,7 +5,7 @@ Always-on AI assistant for Android. Voice notes, quick capture, WhatsApp integra
 ## How It Works
 
 Your phone becomes a smart notes device:
-- **Tap widget** → Record voice → AI transcribes and cleans it up
+- **Tap widget** → Record voice → AI transcribes and saves it
 - **Message WhatsApp** → Assistant responds, saves to vault
 - **Notification actions** → Quick note, sync, ask questions
 
@@ -16,13 +16,29 @@ No terminal needed. Everything via widgets and notifications.
 ```bash
 # In Termux (from F-Droid, NOT Play Store)
 termux-setup-storage
-cd ~/storage/shared/Documents
+cd ~
 git clone <this-repo> claw-notes
 cd claw-notes
 bash setup.sh
 ```
 
-Setup installs dependencies, creates home screen widgets, and starts the assistant.
+Setup will:
+- Install dependencies (Node.js, etc.)
+- Ask where to store your notes (default: `~/storage/shared/Documents/ClawNotes-Vault`)
+- Configure API keys for transcription
+- Copy widgets to home screen
+- Install boot script for auto-start
+
+## Architecture
+
+**Code and data are separate:**
+
+| What | Location | Sync |
+|------|----------|------|
+| Code (this repo) | `~/claw-notes` | Git |
+| Your notes | `~/storage/shared/Documents/ClawNotes-Vault` | Your choice (Syncthing, Google Drive, etc.) |
+
+This keeps your private notes out of the code repo.
 
 ## Home Screen Widgets
 
@@ -37,6 +53,17 @@ After setup, add Termux:Widget to your home screen:
 | **Cloud Sync** | Sync vault to/from cloud (Google Drive, Dropbox, etc.) |
 | **Sync** | Git commit and push (for code repo) |
 | **Status** | Show system status |
+| **Vault Info** | Show vault location for cloud sync setup |
+| **Update Widgets** | Refresh widgets after `git pull` |
+
+## Cloud Sync (Optional)
+
+Your vault is a regular folder. Sync it with any app:
+- **Syncthing** (recommended, open source, F-Droid)
+- **FolderSync** (supports 20+ cloud providers)
+- **Google Drive** / **Dropbox** app
+
+Just point your sync app at: `~/storage/shared/Documents/ClawNotes-Vault`
 
 ## WhatsApp Integration
 
@@ -46,9 +73,11 @@ OpenClaw connects to WhatsApp. Message your assistant to:
 - Get reminders
 - Search your notes
 
-Configure in OpenClaw settings after setup.
+Run `openclaw onboard` after setup to connect.
 
-## What Gets Created
+## Vault Structure
+
+Your notes are stored separately from code:
 
 **Architecture: Code and Data Separation**
 
@@ -64,6 +93,14 @@ Code (this repo):                   Data (your vault):
                                     ├── assets/             # Audio files
                                     └── templates/          # Note templates
 ```
+ClawNotes-Vault/
+├── pages/              # Topic notes
+├── journals/           # Daily journal (YYYY-MM-DD.md)
+├── transcripts/
+│   ├── raw/            # Direct speech-to-text
+│   └── cleaned/        # AI-processed (coherent)
+├── summaries/          # AI summaries
+└── assets/             # Audio files (not synced)
 
 This separation enables:
 - **Public code repo** without exposing personal notes
@@ -96,24 +133,11 @@ From F-Droid (not Play Store):
 - **Termux** - Linux environment
 - **Termux:API** - Android integration
 - **Termux:Widget** - Home screen shortcuts
-- **Termux:Boot** - Auto-start (optional)
+- **Termux:Boot** - Auto-start (optional but recommended)
 
-## Auto-Start on Boot
+## Auto-Start
 
-Install Termux:Boot, then:
-```bash
-cp .claw/boot/start-claw.sh ~/.termux/boot/
-```
-
-The assistant starts automatically when your phone boots.
-
-## Persistent Notification
-
-When running, a notification stays in your tray with quick actions:
-- Tap **Record** to start voice capture
-- Tap **Note** for quick text entry
-
-This also keeps Android from killing the background process.
+Setup automatically installs the boot script. Just install **Termux:Boot** from F-Droid and the assistant starts when your phone boots.
 
 ## API Keys Required
 
@@ -141,10 +165,11 @@ Alternatively, use third-party sync apps like Syncthing, FolderSync, or the Goog
 
 ## Offline Limitations
 
-- Voice recording: Works offline (saves to assets/)
-- Transcription: Requires internet (uses OpenAI Whisper API)
-- AI responses: Requires internet
-- Sync: Requires internet
+```bash
+cd ~/claw-notes
+git pull
+~/.shortcuts/Update\ Widgets   # or tap "Update Widgets" widget
+```
 
 ## For Developers
 
