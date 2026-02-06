@@ -46,9 +46,22 @@ Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenCla
 
 This separation allows:
 - Public code repo without exposing personal notes
-- Cloud sync of vault via Google Drive, Mega, Dropbox, etc.
+- Cloud sync of vault via rclone (built-in) or third-party apps
 - Easy backup and restore of user data
 - Multiple devices sharing the same vault
+
+### Cloud Sync Options
+
+**Option 1: Built-in rclone sync (recommended)**
+- CLI: `claw-sync setup` → `claw-sync sync`
+- Widget: Tap "Cloud Sync" → choose Push/Pull/Sync
+- Supports: Google Drive, Dropbox, Mega, OneDrive, 40+ providers
+- Bidirectional sync with conflict handling
+
+**Option 2: Third-party apps**
+- Syncthing (F-Droid) - P2P sync
+- FolderSync, Dropsync - Scheduled sync
+- Google Drive, Dropbox apps - Native sync
 
 ## Key Principle
 
@@ -189,9 +202,28 @@ Setup copies scripts automatically. After `git pull`, update widgets:
 
 ## Cloud Sync
 
-The vault is a standard folder in Android shared storage. Sync it with any app you prefer:
+The vault is a standard folder in Android shared storage. Sync options:
 
-### Recommended Apps
+### Option 1: Built-in rclone (Recommended)
+
+**Setup:**
+```bash
+pkg install rclone
+claw-sync setup  # Interactive config for cloud provider
+```
+
+**Usage:**
+- CLI: `claw-sync sync` (bidirectional), `claw-sync push`, `claw-sync pull`
+- Widget: Tap "Cloud Sync" → choose operation
+- Supports 40+ providers: Google Drive, Dropbox, Mega, OneDrive, pCloud, etc.
+
+**Features:**
+- Bidirectional sync with conflict detection
+- Interactive setup via widgets (no terminal needed)
+- Progress notifications
+- Excludes `.git/`, `*.tmp`, `.DS_Store` automatically
+
+### Option 2: Third-Party Apps
 
 | App | Type | Notes |
 |-----|------|-------|
@@ -200,8 +232,7 @@ The vault is a standard folder in Android shared storage. Sync it with any app y
 | **Dropsync** | Dropbox | Dedicated Dropbox sync |
 | **Google Drive** | Cloud | Built-in Android, auto-backup folders |
 
-### Setup (Syncthing example)
-
+**Setup (Syncthing example):**
 1. Install Syncthing from F-Droid
 2. Add vault folder: `~/storage/shared/Documents/ClawNotes-Vault`
 3. Connect to your other devices (PC, tablet, etc.)
