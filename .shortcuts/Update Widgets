@@ -1,0 +1,19 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# Widget: Update Widgets
+#
+# Re-copies widgets from repo to ~/.shortcuts/ after git pull
+# Use this after updating the repo to refresh home screen widgets
+
+# Load user config to find CLAW_ROOT
+[ -f "$HOME/.config/claw-notes/config" ] && source "$HOME/.config/claw-notes/config"
+CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+
+termux-toast "Updating widgets..."
+
+if "$CLAW_ROOT/.claw/bin/update-widgets" 2>&1; then
+    termux-toast "Widgets updated! Refresh widget."
+    termux-vibrate -d 100
+else
+    termux-toast "Update failed"
+fi

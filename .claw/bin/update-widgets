@@ -1,0 +1,51 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# Update widgets after git pull
+#
+# Usage: update-widgets
+#
+# Copies widget scripts from repo to ~/.shortcuts/
+# Run this after pulling updates to the repo.
+
+# Load user config to find CLAW_ROOT
+[ -f "$HOME/.config/claw-notes/config" ] && source "$HOME/.config/claw-notes/config"
+CLAW_ROOT="${CLAW_ROOT:-$HOME/claw-notes}"
+
+if [ ! -d "$CLAW_ROOT/.shortcuts" ]; then
+    echo "Error: $CLAW_ROOT/.shortcuts not found"
+    exit 1
+fi
+
+# Create directories
+mkdir -p "$HOME/.shortcuts/tasks"
+chmod 700 "$HOME/.shortcuts"
+chmod 700 "$HOME/.shortcuts/tasks"
+
+# Copy widget scripts
+count=0
+for widget in "$CLAW_ROOT/.shortcuts/"*; do
+    [ -d "$widget" ] && continue
+    name=$(basename "$widget")
+    cp "$widget" "$HOME/.shortcuts/$name"
+    chmod 700 "$HOME/.shortcuts/$name"
+    ((count++))
+done
+
+# Copy background tasks
+for task in "$CLAW_ROOT/.shortcuts/tasks/"*; do
+    [ -f "$task" ] || continue
+    name=$(basename "$task")
+    cp "$task" "$HOME/.shortcuts/tasks/$name"
+    chmod 700 "$HOME/.shortcuts/tasks/$name"
+    ((count++))
+done
+
+echo "Updated $count widgets"
+echo "Refresh Termux:Widget on home screen"
+
+# Also update boot script
+if [ -d "$HOME/.termux/boot" ]; then
+    cp "$CLAW_ROOT/.claw/boot/start-claw.sh" "$HOME/.termux/boot/start-claw.sh"
+    chmod +x "$HOME/.termux/boot/start-claw.sh"
+    echo "Updated boot script"
+fi

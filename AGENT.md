@@ -41,7 +41,7 @@ Claw Notes is an **always-on AI assistant platform** for Android Termux. OpenCla
 | Component | Location | Sync Method |
 |-----------|----------|-------------|
 | **Code** (scripts, widgets) | `~/claw-notes/` (this repo) | Git |
-| **Data** (notes, journals) | `~/storage/shared/Documents/ClawNotes-Vault/` | Cloud (rclone or third-party apps) |
+| **Data** (notes, journals) | `~/storage/shared/Documents/ClawNotes-Vault/` | Sync app (Syncthing, etc.) |
 | **Config** (API keys) | `~/.config/claw-notes/` + `~/.openclaw/` | Manual backup |
 
 This separation allows:
@@ -115,12 +115,14 @@ claw-notes/                      ← PUBLIC (git repo)
 │   ├── Sync                     ← Git commit/push (code)
 │   ├── Vault Info               ← Show vault location for syncing
 │   ├── Status                   ← Show system status
+│   ├── Update Widgets           ← Refresh widgets after git pull
 │   └── tasks/                   ← Background processing
 ├── .claw/
 │   ├── boot/                    ← Auto-start scripts
 │   │   ├── watchdog.sh          ← Keeps OpenClaw alive
 │   │   └── start-claw.sh        ← Boot script (copied to ~/.termux/boot/)
 │   ├── bin/                     ← CLI tools
+│   │   └── update-widgets       ← Re-copy widgets to ~/.shortcuts/
 │   ├── lib/                     ← Shared config
 │   ├── skills/                  ← Workspace skills
 │   └── config/                  ← OpenClaw config template
@@ -191,12 +193,11 @@ SAF via `termux-setup-storage`. Vault at `~/storage/shared/Documents/ClawNotes-V
 Widget scripts must be **copied** (not symlinked) to `~/.shortcuts/`:
 - Symlinks to external paths don't work (canonical path check)
 - Directory permissions must be `700`
-- Refresh widget after changes
+- Refresh widget on home screen after changes
 
-Setup copies scripts automatically. To update manually:
+Setup copies scripts automatically. After `git pull`, update widgets:
 ```bash
-cp -r /path/to/claw-notes/.shortcuts/* ~/.shortcuts/
-chmod 700 ~/.shortcuts ~/.shortcuts/*
+~/claw-notes/.claw/bin/update-widgets   # Or tap "Update Widgets" widget
 ```
 
 ## Cloud Sync
