@@ -38,7 +38,7 @@ else
     echo ""
 fi
 
-TOTAL=9
+TOTAL=10
 
 # Step 1: Update packages
 step 1 $TOTAL "Updating packages..."
@@ -79,6 +79,40 @@ else
     ok "Skipped"
 fi
 
+# Check for existing installation at old location and offer migration
+if [ "$ENV" = "termux" ]; then
+    OLD_LOCATION="$HOME/storage/shared/Documents/claw-notes"
+    if [ -d "$OLD_LOCATION/.claw" ] && [ "$SCRIPT_DIR" != "$OLD_LOCATION" ]; then
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}Migration Notice${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "    An existing installation was found at:"
+        echo "    $OLD_LOCATION"
+        echo ""
+        echo "    The default location has changed to:"
+        echo "    $HOME/claw-notes"
+        echo ""
+        echo "    Your current installation is at:"
+        echo "    $SCRIPT_DIR"
+        echo ""
+        echo "    Note: This is a code location change. Your data (notes/journals)"
+        echo "    will be stored separately in a vault location you choose next."
+        echo ""
+        read -p "    Continue with setup? [Y/n] " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo ""
+            echo "Setup cancelled. You can:"
+            echo "  1. Move the repo: mv '$OLD_LOCATION' '$HOME/claw-notes'"
+            echo "  2. Or update config: echo 'CLAW_ROOT=\"$OLD_LOCATION\"' > ~/.config/claw-notes/config"
+            echo ""
+            exit 0
+        fi
+    fi
+fi
+
 # Step 5: Configure vault location (DATA separate from CODE)
 step 5 $TOTAL "Configuring vault location..."
 echo ""
@@ -96,20 +130,51 @@ fi
 echo "    Default: $DEFAULT_VAULT"
 read -p "    Press Enter to accept, or type custom path: " CUSTOM_VAULT
 
+# Validate custom vault path if provided
+if [ -n "$CUSTOM_VAULT" ]; then
+    # Require an absolute path to avoid ambiguity and unsafe locations
+    case "$CUSTOM_VAULT" in
+        /*) ;;
+        *)
+            warn "Custom vault path must be an absolute path. Using default: $DEFAULT_VAULT"
+            CUSTOM_VAULT=""
+            ;;
+    esac
+
+    # Allow only a conservative set of characters in the path
+    if [ -n "$CUSTOM_VAULT" ] && printf '%s' "$CUSTOM_VAULT" | grep -qE '[^A-Za-z0-9_./-]'; then
+        warn "Custom vault path contains unsupported characters. Using default: $DEFAULT_VAULT"
+        CUSTOM_VAULT=""
+    fi
+fi
+
 VAULT_ROOT="${CUSTOM_VAULT:-$DEFAULT_VAULT}"
 
 # Create vault directories
-mkdir -p "$VAULT_ROOT/pages" \
+if ! mkdir -p "$VAULT_ROOT/pages" \
          "$VAULT_ROOT/journals" \
          "$VAULT_ROOT/transcripts/raw" \
          "$VAULT_ROOT/transcripts/cleaned" \
          "$VAULT_ROOT/summaries" \
          "$VAULT_ROOT/assets" \
-         "$VAULT_ROOT/templates"
+         "$VAULT_ROOT/templates"; then
+    echo -e "${RED}Error:${NC} Failed to create vault directories at '$VAULT_ROOT'. Please check the path and your permissions."
+    exit 1
+fi
+
+# Ensure vault root is writable
+if [ ! -w "$VAULT_ROOT" ]; then
+    echo -e "${RED}Error:${NC} Vault path '$VAULT_ROOT' is not writable. Please choose a different location."
+    exit 1
+fi
 
 # Copy templates to vault if not exists
 if [ ! -f "$VAULT_ROOT/templates/note.md" ] && [ -d "$SCRIPT_DIR/templates" ]; then
-    cp -r "$SCRIPT_DIR/templates/"* "$VAULT_ROOT/templates/" 2>/dev/null || true
+    if ! cp -r "$SCRIPT_DIR/templates/"* "$VAULT_ROOT/templates/"; then
+        warn "Failed to copy default templates into '$VAULT_ROOT/templates'. You may need to copy them manually."
+    else
+        ok "Default templates copied to vault"
+    fi
 fi
 
 # Copy Syncthing ignore file to vault root (for cloud sync)
@@ -124,7 +189,47 @@ if [ -d "$SCRIPT_DIR/pages" ] && [ ! -f "$VAULT_ROOT/pages/welcome.md" ]; then
     echo ""
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
         cp -r "$SCRIPT_DIR/pages/"* "$VAULT_ROOT/pages/" 2>/dev/null || true
-        cp -r "$SCRIPT_DIR/journals/"* "$VAULT_ROOT/journals/" 2>/dev/null || true
+        
+         # Create a dated example journal entry using the current date instead of copying a static file
+        today="$(date +%Y-%m-%d)"
+        example_journal="$VAULT_ROOT/journals/${today}.md"
+        if [ ! -f "$example_journal" ]; then
+            cat > "$example_journal" <<'JOURNAL_EOF'
+---
+type: journal
+date: DATE_PLACEHOLDER
+created: DATE_PLACEHOLDER_ISO
+---
+
+# DATE_PLACEHOLDER
+
+## Welcome to Claw Notes
+
+This is your daily journal. The structure is:
+
+- **Code** (scripts, widgets): Lives in the git repo (~/claw-notes)
+- **Data** (notes, journals): Lives here in the vault (can be synced to cloud)
+
+Your vault can be synced independently using:
+- Syncthing (recommended, F-Droid)
+- FolderSync
+- Google Drive / Dropbox apps
+- Any rclone-supported provider
+
+## Getting Started
+
+1. Add Termux:Widget to your home screen
+2. Tap 'Record Voice' to transcribe audio
+3. Tap 'Journal' to create daily entries
+4. Tap 'Quick Note' for topic notes
+
+Start writing your first entry below this line.
+JOURNAL_EOF
+            # Replace placeholders with actual date
+            sed -i "s/DATE_PLACEHOLDER_ISO/${today}T00:00:00Z/g" "$example_journal"
+            sed -i "s/DATE_PLACEHOLDER/${today}/g" "$example_journal"
+        fi
+        
         ok "Example content copied to vault"
     fi
 fi
@@ -264,17 +369,41 @@ if [ "$ENV" = "termux" ]; then
     cp "$SCRIPT_DIR/.claw/boot/start-claw.sh" "$HOME/.termux/boot/start-claw.sh"
     chmod +x "$HOME/.termux/boot/start-claw.sh"
 
-    # Update boot script with actual paths
-    sed -i "s|CLAW_ROOT=\"\"|CLAW_ROOT=\"$SCRIPT_DIR\"|g" "$HOME/.termux/boot/start-claw.sh" 2>/dev/null || true
-
     ok "Boot script installed to ~/.termux/boot/"
     echo "    Note: Install Termux:Boot from F-Droid for auto-start"
 else
     ok "Skipped (Termux only)"
 fi
 
-# Step 9: Start assistant
-step 9 $TOTAL "Starting assistant..."
+# Step 9: Cloud sync setup (optional)
+step 9 $TOTAL "Cloud sync setup (optional)..."
+echo ""
+echo "    Your vault can be synced to cloud storage:"
+echo "    Google Drive, Mega, Dropbox, OneDrive, etc."
+echo ""
+read -p "    Setup cloud sync now? [y/N] " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Install rclone if needed
+    if ! command -v rclone &> /dev/null; then
+        echo "    Installing rclone..."
+        if [ "$ENV" = "termux" ]; then
+            pkg install -y rclone > /dev/null 2>&1
+        fi
+    fi
+
+    if command -v rclone &> /dev/null; then
+        "$SCRIPT_DIR/.claw/bin/claw-sync" --setup
+    else
+        warn "Install rclone manually, then run: claw-sync --setup"
+    fi
+else
+    ok "Skipped - run 'claw-sync --setup' later"
+fi
+
+# Step 10: Start assistant
+step 10 $TOTAL "Starting assistant..."
 if command -v openclaw &> /dev/null && [ "$ENV" = "termux" ]; then
     "$SCRIPT_DIR/.claw/boot/watchdog.sh" --daemon 2>/dev/null
     sleep 2
@@ -309,11 +438,16 @@ if [ "$ENV" = "termux" ]; then
     echo ""
     echo "  4. Your notes are in: $VAULT_ROOT"
     echo ""
-    echo "Cloud sync (optional):"
-    echo "  Sync your vault folder with any app:"
-    echo "  - Syncthing (recommended, F-Droid)"
-    echo "  - FolderSync, Dropsync"
-    echo "  - Google Drive, Dropbox app"
+    echo "Cloud sync:"
+    echo "  Configure cloud sync with Google Drive, Dropbox, Mega, etc.:"
+    echo "    claw-sync --setup"
+    echo ""
+    echo "  Then use the 'Cloud Sync' widget on your home screen"
+    echo ""
+    echo "  Or sync manually with third-party apps:"
+    echo "    - Syncthing (recommended, F-Droid)"
+    echo "    - FolderSync, Dropsync"
+    echo "    - Google Drive, Dropbox app"
     echo ""
 
     if command -v termux-notification &> /dev/null; then

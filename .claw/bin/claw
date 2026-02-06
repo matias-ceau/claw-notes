@@ -20,6 +20,7 @@ Commands:
   note <title>        Create quick text note
   journal [text]      Add to today's journal
   sync [message]      Git commit and push
+  cloud-sync [cmd]    Cloud sync (push/pull/sync) via rclone
   start               Start OpenClaw gateway
   stop                Stop OpenClaw gateway
   status              Show system status
@@ -155,6 +156,10 @@ case "${1:-help}" in
     sync)
         shift
         cmd_sync "$@"
+        ;;
+    cloud-sync)
+        shift
+        "$CLAW_BIN/claw-sync" "$@"
         ;;
     start)
         cmd_start

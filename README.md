@@ -50,7 +50,8 @@ After setup, add Termux:Widget to your home screen:
 | **Quick Note** | Dialog for quick text capture |
 | **Journal** | Add to today's journal |
 | **Ask Assistant** | Quick question → AI response via notification |
-| **Sync** | Git commit and push (code repo) |
+| **Cloud Sync** | Sync vault to/from cloud (Google Drive, Dropbox, etc.) |
+| **Sync** | Git commit and push (for code repo) |
 | **Status** | Show system status |
 | **Vault Info** | Show vault location for cloud sync setup |
 | **Update Widgets** | Refresh widgets after `git pull` |
@@ -78,6 +79,19 @@ Run `openclaw onboard` after setup to connect.
 
 Your notes are stored separately from code:
 
+**Architecture: Code and Data Separation**
+
+```
+Code (this repo):                   Data (your vault):
+~/claw-notes/                       ~/storage/shared/Documents/ClawNotes-Vault/
+├── .claw/                          ├── pages/              # Your notes
+│   ├── bin/                        ├── journals/           # Daily journal
+│   ├── lib/                        ├── transcripts/
+│   └── boot/                       │   ├── raw/            # Speech-to-text
+├── .shortcuts/                     │   └── cleaned/        # AI-processed
+└── setup.sh                        ├── summaries/          # AI summaries
+                                    ├── assets/             # Audio files
+                                    └── templates/          # Note templates
 ```
 ClawNotes-Vault/
 ├── pages/              # Topic notes
@@ -87,7 +101,31 @@ ClawNotes-Vault/
 │   └── cleaned/        # AI-processed (coherent)
 ├── summaries/          # AI summaries
 └── assets/             # Audio files (not synced)
+
+This separation enables:
+- **Public code repo** without exposing personal notes
+- **Cloud sync** of vault only (Google Drive, Dropbox, etc.)
+- **Multiple devices** sharing the same vault
+
+## Cloud Sync
+
+### Built-in rclone (Recommended)
+
+```bash
+pkg install rclone
+claw-sync setup    # Interactive cloud setup
+claw-sync sync     # Bidirectional sync
 ```
+
+Or use the **Cloud Sync** widget for one-tap sync.
+
+Supports 40+ providers: Google Drive, Dropbox, Mega, OneDrive, pCloud, Box, etc.
+
+### Alternative: Third-party apps
+
+- **Syncthing** (F-Droid) - P2P, no cloud account needed
+- **FolderSync** - Schedule sync for 20+ cloud providers
+- **Google Drive app** - Auto-backup folders
 
 ## Requirements
 
@@ -109,7 +147,23 @@ Transcription uses cloud APIs (local Whisper doesn't work on Termux):
 
 Setup will prompt for these keys.
 
-## Updating
+## Cloud Sync
+
+Sync your vault to cloud storage (Google Drive, Dropbox, Mega, OneDrive, etc.):
+
+```bash
+# Configure cloud sync (first time)
+claw-sync --setup
+
+# Then use the Cloud Sync widget, or run:
+claw cloud-sync
+```
+
+The Cloud Sync widget provides bidirectional sync, push-only, pull-only, and status options.
+
+Alternatively, use third-party sync apps like Syncthing, FolderSync, or the Google Drive app.
+
+## Offline Limitations
 
 ```bash
 cd ~/claw-notes
